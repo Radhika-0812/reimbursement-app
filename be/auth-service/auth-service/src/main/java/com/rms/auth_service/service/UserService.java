@@ -5,4 +5,6 @@ import com.rms.auth_service.dtos.*;
 public interface UserService {
     AuthRes signup(SignUpReq req);
     AuthRes login(SignInReq req);
+    UserDto findByEmailOrId(String emailOrId);
+
 }

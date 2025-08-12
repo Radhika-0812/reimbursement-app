@@ -5,6 +5,7 @@ import com.rms.auth_service.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -28,4 +29,11 @@ public class AuthController {
     public ResponseEntity<MessageRes> logout() {
         return ResponseEntity.ok(new MessageRes("Logged out"));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserDto> me(Authentication authentication) {
+        String principal = authentication.getName(); // could be email or numeric ID
+        return ResponseEntity.ok(service.findByEmailOrId(principal));
+    }
 }
+
