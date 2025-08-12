@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
 import { useClaims } from "../state/ClaimsContext";
 import NavBar from "../components/NavBar";
+import api from "../lib/api";
 
 /** Category metadata + required docs (shown on the form) */
 const CATEGORIES = [
@@ -55,9 +56,14 @@ const CATEGORIES = [
 /** S3 upload stub: replace with your backend presign flow */
 async function uploadToS3(file) {
   if (!file) return null;
-  // TODO: call your backend for a presigned URL, then PUT the file.
-  // Return the S3 key / URL to save in the claim payload.
-  return `s3://your-bucket/${Date.now()}-${file.name}`;
+  // 1) Ask BE for a presigned URL
+  const { data } = await api.post("/api/files/presign", {
+    contentType: file.type,
+    fileName: file.name
+  });
+  // Expect { uploadUrl, publicUrl, key }
+  await fetch(data.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+  return data.publicUrl ?? data.key; // save this in claim
 }
 
 export default function CreateClaim() {
@@ -72,7 +78,7 @@ export default function CreateClaim() {
   };
 
   return (
-    <div><NavBar />
+    <div>
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-semibold text-blue-950">Create Claim</h1>

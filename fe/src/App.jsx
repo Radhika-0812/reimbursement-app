@@ -1,7 +1,8 @@
+// App.jsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./state/AuthContext";
 import { ClaimsProvider } from "./state/ClaimsContext";
-import { ProtectedRoute } from "./routes/ProtectedRoutes";
+import { ProtectedRoute, UnauthRoute } from "./routes/ProtectedRoutes";
 
 import NavBar from "./components/NavBar";
 import HomePage from "./pages/HomePage";
@@ -10,7 +11,7 @@ import PendingClaims from "./pages/PendingClaims";
 import ClosedClaims from "./pages/ClosedClaims";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
-import Signup from "./pages/signUp";
+import Signup from "./pages/Signup";  
 import React from "react";
 
 export default function App() {
@@ -18,19 +19,20 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ClaimsProvider>
-          {/* Auth pages (no navbar) */}
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+            {/* Auth-only pages */}
+            <Route path="/login" element={<UnauthRoute><Login /></UnauthRoute>} />
+            <Route path="/signup" element={<UnauthRoute><Signup /></UnauthRoute>} />
 
-            {/* App pages (with navbar) */}
+            {/* App pages (protected) */}
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/create-claim" element={<CreateClaim />} />
+             <Route path="/" element={<HomePage />} />
+             <Route path="/create-claim" element={<CreateClaim />} />
               <Route path="/pending-claims" element={<PendingClaims />} />
               <Route path="/closed-claims" element={<ClosedClaims />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
+
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -44,7 +46,7 @@ import { Outlet } from "react-router-dom";
 function Layout() {
   return (
     <>
-      
+      <NavBar /> 
       <Outlet />
     </>
   );

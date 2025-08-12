@@ -28,7 +28,7 @@ export default function HomePage() {
       : claims.filter(c => c.status === "closed" && c.userId === user.id).length;
 
   return (
-    <div><NavBar />
+    <div>
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
       <div className="mx-auto max-w-6xl w-full">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-center">

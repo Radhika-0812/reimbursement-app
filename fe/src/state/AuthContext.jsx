@@ -1,53 +1,97 @@
+// src/state/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import api, { tokenStore, inject401Handler } from "../lib/api";
 
 const AuthContext = createContext(null);
-
-const LS_USERS = "app_users";
 const LS_CURRENT = "app_current_user";
 
-const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); } catch { return d; } };
+const read = (k, d) => {
+  try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); }
+  catch { return d; }
+};
 const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 export function AuthProvider({ children }) {
-  // seed one finance & one manager & one admin for easy testing
-  const [users, setUsers] = useState(() => {
-    const u = read(LS_USERS, null);
-    if (u && u.length) return u;
-    const seed = [
-      { id:"u-admin", role:"admin", email:"admin@demo.com", password:"admin123", firstName:"Admin", lastName:"User" },
-      { id:"u-mgr", role:"manager", email:"manager@demo.com", password:"manager123", firstName:"Mila", lastName:"Manager" },
-      { id:"u-fin", role:"finance", email:"finance@demo.com", password:"finance123", firstName:"Finn", lastName:"Finance" },
-    ];
-    write(LS_USERS, seed);
-    return seed;
-  });
   const [user, setUser] = useState(() => read(LS_CURRENT, null));
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => write(LS_USERS, users), [users]);
-  useEffect(() => write(LS_CURRENT, user), [user]);
+  // global 401 → logout
+  useEffect(() => {
+    inject401Handler(() => {
+      tokenStore.set(null);
+      setUser(null);
+      write(LS_CURRENT, null);
+    });
+  }, []);
 
+  // hydrate current user if token/cookie available
+  useEffect(() => {
+    (async () => {
+      try {
+        const hasToken = !!tokenStore.get();
+        if (hasToken || api.defaults.withCredentials) {
+          const { data } = await api.get("/api/auth/me");
+          setUser(data || null);
+          write(LS_CURRENT, data || null);
+        }
+      } catch {
+        tokenStore.set(null);
+        setUser(null);
+        write(LS_CURRENT, null);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // Map FE → BE exactly to your SignUpReq DTO
   const signup = async (form) => {
-    const email = form.email.trim().toLowerCase();
-    if (users.some(u => u.email === email)) throw new Error("Email already exists.");
-    const name = [form.firstName, form.lastName].filter(Boolean).join(" ").trim();
-    const newUser = { id: crypto.randomUUID(), ...form, email, name };
-    setUsers(prev => [newUser, ...prev]);
-    // After signup go back to login (do NOT log them in automatically)
-    return newUser;
+    const payload = {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      dob: form.dob,                 // "YYYY-MM-DD"
+      doj: form.doj,                 // "YYYY-MM-DD"
+      department: form.department,
+      manager: form.manager,         // string
+      role: form.role,
+      contactNo: form.contact ?? form.contactNo, // 10 digits
+      address: form.address,
+      pincode: form.pincode,         // 6 digits
+      email: form.email,
+      password: form.password,       // 8–64 chars
+    };
+    await api.post("/api/auth/signup", payload);
+    return true; // caller can navigate to /login
   };
 
   const login = async ({ email, password }) => {
-    email = email.trim().toLowerCase();
-    const found = users.find(u => u.email === email && u.password === password);
-    if (!found) throw new Error("Invalid email or password.");
-    const { password: _pw, ...safe } = found;
-    setUser(safe);
-    return found;
+    // BE endpoint is /signin (not /login)
+    const { data } = await api.post("/api/auth/login", { email, password });
+
+    if (data?.token) tokenStore.set(data.token);
+
+    // Prefer user from signin response; fallback to /me
+    let nextUser = data?.user ?? null;
+    if (!nextUser) {
+      try {
+        const me = await api.get("/api/auth/me");
+        nextUser = me.data ?? null;
+      } catch { /* ignore */ }
+    }
+
+    setUser(nextUser);
+    write(LS_CURRENT, nextUser);
+    return nextUser;
   };
 
-  const logout = () => setUser(null);
+  const logout = async () => {
+    try { await api.post("/api/auth/logout"); } catch {}
+    tokenStore.set(null);
+    setUser(null);
+    write(LS_CURRENT, null);
+  };
 
-  const value = useMemo(() => ({ user, users, signup, login, logout }), [user, users]);
+  const value = useMemo(() => ({ user, loading, signup, login, logout }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

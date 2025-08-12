@@ -7,7 +7,7 @@ export default function Profile() {
   if (!user) return null;
   return (
     <div>
-        <NavBar />
+        
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">My Profile</h1>
       <div className="bg-white border rounded-xl p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">

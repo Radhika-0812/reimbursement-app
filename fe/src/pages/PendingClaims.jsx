@@ -45,7 +45,7 @@ export default function PendingClaims() {
 
   return (
     <div>
-       <NavBar />
+       
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
      
       <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">Pending Claims</h1>
