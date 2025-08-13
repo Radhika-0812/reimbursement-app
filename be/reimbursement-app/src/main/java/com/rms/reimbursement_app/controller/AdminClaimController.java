@@ -1,0 +1,22 @@
+package com.rms.reimbursement_app.controller;
+
+import com.rms.reimbursement_app.dto.ClaimResponse;
+import com.rms.reimbursement_app.dto.RejectClaimRequest;
+import com.rms.reimbursement_app.service.ClaimService;
+import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController @RequestMapping("/api/admin/claims")
+public class AdminClaimController {
+    private final ClaimService service;
+    public AdminClaimController(ClaimService service){ this.service = service; }
+
+    @PatchMapping("/{id}/approve") @PreAuthorize("hasRole('ADMIN')")
+    public ClaimResponse approve(@PathVariable Long id) { return ClaimResponse.from(service.approve(id)); }
+
+    @PatchMapping("/{id}/reject") @PreAuthorize("hasRole('ADMIN')")
+    public ClaimResponse reject(@PathVariable Long id, @Valid @RequestBody RejectClaimRequest req) {
+        return ClaimResponse.from(service.reject(id, req.getAdminComment()));
+    }
+}
