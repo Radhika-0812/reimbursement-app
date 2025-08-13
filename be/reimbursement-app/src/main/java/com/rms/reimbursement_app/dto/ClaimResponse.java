@@ -13,6 +13,7 @@ import java.time.Instant;
 public class ClaimResponse {
     private Long id;
     private Long userId;
+    private String userName;
     private String title;
     private Long amountCents;
     private ClaimType claimType;
@@ -27,6 +28,7 @@ public class ClaimResponse {
         return ClaimResponse.builder()
                 .id(c.getId())
                 .userId(c.getUserId())
+                .userName(c.getUserName())
                 .title(c.getTitle())
                 .amountCents(c.getAmountCents())
                 .claimType(c.getClaimType())

@@ -1,27 +1,27 @@
+buildscript {
+	repositories { mavenCentral() }
+	dependencies {
+		// Gradle task classpath for Flyway 11 + Postgres
+		classpath "org.flywaydb:flyway-database-postgresql:11.7.2"
+		classpath "org.postgresql:postgresql:42.7.4"
+	}
+}
+
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.4'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.flywaydb.flyway' version '11.7.2'   // <-- bump to 11.7.2
 }
 
-group = 'com.rms'
-version = '0.0.1-SNAPSHOT'
-
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+flyway {
+	url = System.getProperty('flyway.url', 'jdbc:postgresql://localhost:5432/reimbursedb')
+	user = System.getProperty('flyway.user', 'app')
+	password = System.getProperty('flyway.password', 'RADhi@081215')
+	// locations default to classpath:db/migration
 }
 
-configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
-	}
-}
-
-repositories {
-	mavenCentral()
-}
+repositories { mavenCentral() }
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
@@ -31,16 +31,16 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.security:spring-security-oauth2-jose'
-	implementation 'org.flywaydb:flyway-core'
-	implementation 'org.flywaydb:flyway-database-postgresql'
+
+	// Keep Flyway 11 in the app runtime too (Boot will pick this up)
+	implementation 'org.flywaydb:flyway-core:11.7.2'
+	implementation 'org.flywaydb:flyway-database-postgresql:11.7.2'
+
+	runtimeOnly 'org.postgresql:postgresql:42.7.4'
+
 	compileOnly 'org.projectlombok:lombok'
-	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
 }

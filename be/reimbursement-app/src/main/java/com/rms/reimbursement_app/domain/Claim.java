@@ -6,6 +6,8 @@ import jakarta.persistence.*; import lombok.*; import java.time.*;
 public class Claim {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable=false) private Long userId;
+    @Column(name = "user_name", nullable = false, length = 30)
+    private String userName;
     @Column(nullable=false, length=140) private String title;
     @Column(nullable=false) private Long amountCents;
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=40) private ClaimType claimType;
