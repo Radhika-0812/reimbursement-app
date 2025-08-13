@@ -6,7 +6,7 @@ import jakarta.persistence.*; import lombok.*; import java.time.*;
 public class Claim {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable=false) private Long userId;
-    @Column(name = "user_name", nullable = false, length = 30)
+    @Column(name = "user_name", nullable = false, length = 30, insertable = false, updatable = false)
     private String userName;
     @Column(nullable=false, length=140) private String title;
     @Column(nullable=false) private Long amountCents;

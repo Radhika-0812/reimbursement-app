@@ -3,19 +3,26 @@ package com.rms.reimbursement_app.service;
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.domain.*;
 import com.rms.reimbursement_app.repository.ClaimRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Service @RequiredArgsConstructor
+@Service
+@RequiredArgsConstructor
 public class ClaimService {
     private final ClaimRepository repo;
+
+    @PersistenceContext
+    private EntityManager em; // <-- needed for flush + refresh
 
     @Transactional
     public List<Claim> createBatch(Long userId, List<CreateClaimRequest> items) {
         if (items == null || items.isEmpty()) throw new IllegalArgumentException("No claims provided");
+
         var entities = items.stream().map(in -> {
             var c = new Claim();
             c.setUserId(userId);
@@ -27,7 +34,14 @@ public class ClaimService {
             c.setStatus(ClaimStatus.PENDING);
             return c;
         }).toList();
-        return repo.saveAll(entities);
+
+        var saved = repo.saveAll(entities);
+
+        // ⬇️ Make sure DB triggers run and JPA sees DB-populated columns (user_name)
+        em.flush();                 // force INSERTs now
+        saved.forEach(em::refresh); // re-read rows -> userName is now populated
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -40,7 +54,10 @@ public class ClaimService {
         var c = repo.findById(id).orElseThrow();
         if (c.getStatus() != ClaimStatus.PENDING) throw new IllegalStateException("Only pending can be approved");
         c.setStatus(ClaimStatus.APPROVED);
-        return repo.save(c);
+        var saved = repo.save(c);
+        // If you later add a DB trigger that updates timestamps, uncomment:
+        // em.flush(); em.refresh(saved);
+        return saved;
     }
 
     @Transactional
@@ -50,6 +67,8 @@ public class ClaimService {
         if (c.getStatus() != ClaimStatus.PENDING) throw new IllegalStateException("Only pending can be rejected");
         c.setStatus(ClaimStatus.REJECTED);
         c.setAdminComment(comment);
-        return repo.save(c);
+        var saved = repo.save(c);
+        // em.flush(); em.refresh(saved);
+        return saved;
     }
 }
