@@ -1,71 +1,56 @@
-import React from "react";
-import { useAuth } from "../state/AuthContext";
+import React, { useEffect, useMemo, useState } from "react";
 import { useClaims } from "../state/ClaimsContext";
-import NavBar from "../components/NavBar";
+import Pagination from "../components/Pagination";
 
-/**
- * Closed view:
- * - employee: their own closed items
- * - manager: closed items for their team (claims where managerId === manager.id)
- * - finance/admin: all closed items
- */
+const PAGE_SIZE = 10;
+
 export default function ClosedClaims() {
-  const { user } = useAuth();
-  const { claims } = useClaims();
+  const { closed = [], loading, refresh } = useClaims();
+  const [page, setPage] = useState(1);
 
-  let list = [];
-  if (user.role === "employee") {
-    list = claims.filter((c) => c.status === "closed" && c.userId === user.id);
-  } else if (user.role === "manager") {
-    list = claims.filter((c) => c.status === "closed" && c.managerId === user.id);
-  } else {
-    // finance or admin (or any other elevated roles)
-    list = claims.filter((c) => c.status === "closed");
-  }
+  useEffect(() => {
+    refresh().catch(() => {});
+  }, []);
+
+  const total = closed?.length || 0;
+  const pageItems = useMemo(() => {
+    if (!Array.isArray(closed)) return [];
+    const start = (page - 1) * PAGE_SIZE;
+    return closed.slice(start, start + PAGE_SIZE);
+  }, [closed, page]);
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (page > pageCount) setPage(1);
+  }, [total]);
 
   return (
-    <div>
-     
-        
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">Closed Claims</h1>
 
-      {list.length === 0 ? (
-        <div className="text-gray-500">No closed claims.</div>
-      ) : (
-        <div className="space-y-3">
-          {list.map((c) => (
-            <div key={c.id} className="border p-4 rounded-lg bg-white">
-              <div className="flex items-center justify-between">
-                <div className="font-medium capitalize">{c.category}</div>
-                <span className="text-xs px-2 py-1 rounded-full bg-green-600 text-white">Closed</span>
-              </div>
+      {loading && <p>Loading…</p>}
+      {!loading && total === 0 && <p className="text-gray-500">No closed claims.</p>}
 
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-700">
-                <div>Amount: ₹{c.amount}</div>
-                <div>Created: {new Date(c.createdAt).toLocaleString()}</div>
-              </div>
-
-              {/* optional: show last finance comment from history */}
-              {Array.isArray(c.history) && c.history.length > 0 && (
-                <div className="mt-2 text-sm text-gray-600">
-                  <div className="font-medium">Approval Trail</div>
-                  <ul className="mt-1 list-disc ml-5">
-                    {c.history.map((h, idx) => (
-                      <li key={idx}>
-                        <span className="capitalize">{h.role}</span> {h.action} on{" "}
-                        {new Date(h.at).toLocaleString()}
-                        {h.comment ? <> — <span className="italic">“{h.comment}”</span></> : null}
-                      </li>
-                    ))}
-                  </ul>
+      {!loading && total > 0 && (
+        <>
+          <div className="space-y-3">
+            {pageItems.map((c) => (
+              <div key={c.id ?? c.claimId} className="flex items-center justify-between border p-4 rounded-lg bg-white">
+                <div>
+                  <div className="font-medium capitalize">{c.title ?? c.category}</div>
+                  <div className="text-sm text-gray-600">Status: {c.status}</div>
+                  {c.closedAt && (
+                    <div className="text-sm text-gray-500">Closed: {new Date(c.closedAt).toLocaleString()}</div>
+                  )}
+                  <div className="text-sm text-gray-500">Amount: ₹{c.amountCents != null ? c.amountCents : c.amount}</div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
+        </>
       )}
-    </div>
     </div>
   );
 }
