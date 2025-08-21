@@ -87,48 +87,48 @@ export default function HomePage() {
           
           {/* Pie: claims per category (no labels, no legend) */}
           <div className="rounded-xl border bg-white p-4">
-  <div className="text-sm text-gray-600 mb-2">Claims by category</div>
-  <div className="h-64">
-    <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        <Pie
-          data={categoryTotals}
-          dataKey="value"
-          nameKey="name"
-          cx="50%"
-          cy="50%"
-          outerRadius={90}
-          label={false}   // 🚫 removes slice labels
-        >
-          {categoryTotals.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Pie>
-        <Tooltip contentStyle={{ fontSize: "12px" }} />
-        <Legend wrapperStyle={{ fontSize: "12px" }} /> {/* ✅ clean legend below */}
-      </PieChart>
-    </ResponsiveContainer>
-  </div>
-</div>
+          <div className="text-sm text-gray-600 mb-2">Claims by category</div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={categoryTotals}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={90}
+                  label={false}   // 🚫 removes slice labels
+                >
+                  {categoryTotals.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ fontSize: "12px" }} />
+                <Legend wrapperStyle={{ fontSize: "12px" }} /> {/* ✅ clean legend below */}
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-{/* Stacked bar: Status by category (different colors) */}
-<div className="rounded-xl border bg-white p-4">
-  <div className="text-sm text-gray-600 mb-2">Status by category</div>
-  <div className="h-64">
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={byCategoryStatus} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="category" tick={{ fontSize: 12 }} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-        <Tooltip contentStyle={{ fontSize: "12px" }} />
-        <Legend wrapperStyle={{ fontSize: "12px" }} />
-        <Bar dataKey="Pending" stackId="a" fill="#f59e0b" />   {/* Orange */}
-        <Bar dataKey="Approved" stackId="a" fill="#16a34a" /> {/* Green */}
-        <Bar dataKey="Rejected" stackId="a" fill="#ef4444" /> {/* Red */}
-      </BarChart>
-    </ResponsiveContainer>
-  </div>
-</div>
+        {/* Stacked bar: Status by category (different colors) */}
+        <div className="rounded-xl border bg-white p-4">
+          <div className="text-sm text-gray-600 mb-2">Status by category</div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byCategoryStatus} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="category" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip contentStyle={{ fontSize: "12px" }} />
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Bar dataKey="Pending" stackId="a" fill="#f59e0b" />   {/* Orange */}
+                <Bar dataKey="Approved" stackId="a" fill="#16a34a" /> {/* Green */}
+                <Bar dataKey="Rejected" stackId="a" fill="#ef4444" /> {/* Red */}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
         </div>
       )}
