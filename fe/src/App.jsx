@@ -10,6 +10,9 @@ import AdminDashboard from "./pages/AdminDashboard";
 import PendingClaims from "./pages/PendingClaims";
 import ClosedClaims from "./pages/ClosedClaims";
 import Profile from "./pages/Profile";
+import { Toaster } from "react-hot-toast";
+import Footer from "./components/Footer";
+import HomePage from "./pages/HomePage";
 
 // Simple protected wrapper (token presence)
 function Protected({ children }) {
@@ -24,7 +27,7 @@ function HomeGate() {
     user.role === "ADMIN" ||
     (Array.isArray(user.roles) && (user.roles.includes("ROLE_ADMIN") || user.roles.includes("ADMIN")))
   );
-  return isAdmin ? <Navigate to="/admin" replace /> : <div className="p-6">Welcome</div>;
+  return isAdmin ? <Navigate to="/admin" replace /> : <HomePage />;
 }
 
 // Only admins can open /admin
@@ -43,7 +46,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ClaimsProvider>
+        <div className="flex flex-col min-h-screen">  
           <NavBar />
+          <main className="flex-1">   
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -58,6 +63,10 @@ export default function App() {
             {/* Home gate: admins auto → /admin */}
             <Route path="/" element={<HomeGate />} />
           </Routes>
+          </main>
+          <Footer />
+          </div>
+          <Toaster position="top-right" reverseOrder={false} />
         </ClaimsProvider>
       </AuthProvider>
     </BrowserRouter>

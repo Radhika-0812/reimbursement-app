@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useClaims } from "../state/ClaimsContext";
 import NavBar from "../components/NavBar";
+import toast from "react-hot-toast";   
 
 // Keep in sync with backend enum com.rms.reimbursement_app.domain.ClaimType
 const CLAIM_TYPES = [
@@ -78,7 +79,7 @@ export default function CreateClaim() {
       if (!payload.length) throw new Error("Add at least one claim row");
       await createBatch(payload);
       setRows([blankRow()]);
-      alert("Claims submitted");
+      toast.success("Claim created successfully");
       navigate("/pending");
     } catch (e) {
       setErr(e.message || "Submit failed");
