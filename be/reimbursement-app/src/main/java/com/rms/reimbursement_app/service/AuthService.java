@@ -22,21 +22,20 @@ public class AuthService {
     private final BCryptPasswordEncoder encoder;
     private final JwtEncoder jwtEncoder;
 
-    @Value("${app.security.jwt.issuer}")
+    @Value("${app.security.jwt.issuer:rms-auth}")
     String issuer;
 
-    @Value("${app.security.jwt.expires-min}")
+    @Value("${app.security.jwt.expires-min:120}")
     long expiresMin;
 
     @Transactional
     public void signup(SignupRequest req) {
-        // Email must be unique
-        users.findByEmail(req.email())
+        // Uniqueness
+        users.findByEmail(req.email().trim().toLowerCase())
                 .ifPresent(u -> { throw new IllegalArgumentException("Email already exists"); });
 
-        // If you added a UNIQUE constraint on users.name (to let claims.user_name FK to it),
-        // keep this guard. For this, add existsByNameIgnoreCase(String name) in UserRepository.
-        if (users.existsByNameIgnoreCase(req.name())) {
+        // Optional: only if you actually created this repository method/constraint
+        if (users.existsByNameIgnoreCase(req.name().trim())) {
             throw new IllegalArgumentException("Name already taken");
         }
 
@@ -44,34 +43,58 @@ public class AuthService {
         u.setName(req.name().trim());
         u.setEmail(req.email().trim().toLowerCase());
         u.setPasswordHash(encoder.encode(req.password()));
-        u.setRole("ROLE_USER"); // default role
+        // normalize role to Spring style ROLE_*
+        String role = "ROLE_USER";
+        u.setRole(role);
+
         u.setDepartment(req.department().trim());
         u.setAddress(req.address().trim());
-        u.setContact(req.contact().trim());   // validated by @Pattern in DTO
-        u.setPincode(req.pincode().trim());   // validated by @Pattern in DTO
+        u.setContact(req.contact().trim());   // validated by DTO
+        u.setPincode(req.pincode().trim());   // validated by DTO
 
         users.save(u);
     }
 
-    public String login(LoginRequest req) {
-        var u = users.findByEmail(req.email().trim().toLowerCase())
+    /**
+     * Verifies credentials and returns the User entity (for controller to build a JWT).
+     * Throws IllegalArgumentException on bad credentials.
+     */
+    public User authenticate(LoginRequest req) {
+        var email = req.email().trim().toLowerCase();
+        var u = users.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
         if (!encoder.matches(req.password(), u.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid credentials");
         }
+        return u;
+    }
 
+    /**
+     * Issues a JWT for a given authenticated user. Adds 'role' claim (ROLE_*),
+     * 'uid', standard 'sub', issuer, iat, exp.
+     */
+    public String issueToken(User u) {
         var now = Instant.now();
+        String role = u.getRole();
+        if (role == null || role.isBlank()) role = "ROLE_USER";
+        if (!role.startsWith("ROLE_")) role = "ROLE_" + role;
+
         var claims = JwtClaimsSet.builder()
                 .issuer(issuer)
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(60L * expiresMin))
                 .subject(u.getEmail())
                 .claim("uid", u.getId())
-                .claim("role", u.getRole())
+                .claim("role", role)  // <-- SecurityConfig's converter uses this
                 .build();
 
         var headers = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
         return jwtEncoder.encode(JwtEncoderParameters.from(headers, claims)).getTokenValue();
+    }
+
+    /** Backward-compatible: if you still want a single call that returns a token. */
+    public String login(LoginRequest req) {
+        return issueToken(authenticate(req));
     }
 }

@@ -1,102 +1,79 @@
-// src/state/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api, { tokenStore, inject401Handler } from "../lib/api";
+import React, { createContext, useContext, useMemo, useState } from "react";
+import * as Auth from "../services/auth";
 
-const AuthContext = createContext(null);
-const LS_CURRENT = "app_current_user";
+const AuthCtx = createContext(null);
 
-const read = (k, d) => {
-  try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); }
-  catch { return d; }
-};
-const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+// robust JWT payload decode (handles base64url)
+function decodeJwt(t) {
+  try {
+    const base = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base));
+  } catch {
+    return null;
+  }
+}
+
+function buildUserFromToken(t, fallbackEmail) {
+  const p = decodeJwt(t);
+  if (!p) return null;
+
+  // roles -> array of "ROLE_*"
+  let roles = [];
+  if (Array.isArray(p.authorities)) roles = p.authorities;
+  else if (Array.isArray(p.roles)) roles = p.roles;
+  else if (p.role) roles = [p.role];
+
+  roles = roles.map(r => (r.startsWith("ROLE_") ? r : `ROLE_${r}`));
+  const primaryRole = (roles[0] || "ROLE_USER").replace(/^ROLE_/, ""); // "USER" / "ADMIN"
+
+  return {
+    id: p.uid ?? p.userId ?? p.id ?? null,         // <-- needed for filtering
+    email: p.sub || p.email || fallbackEmail || "",
+    roles,                                         // e.g. ["ROLE_USER"]
+    role: primaryRole,                             // e.g. "USER"
+    raw: p,
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => read(LS_CURRENT, null));
-  const [loading, setLoading] = useState(true);
-
-  // global 401 → logout
-  useEffect(() => {
-    inject401Handler(() => {
-      tokenStore.set(null);
-      setUser(null);
-      write(LS_CURRENT, null);
-    });
-  }, []);
-
-  // hydrate current user if token/cookie available
-  useEffect(() => {
-    (async () => {
-      try {
-        const hasToken = !!tokenStore.get();
-        if (hasToken || api.defaults.withCredentials) {
-          const { data } = await api.get("/api/auth/me");
-          setUser(data || null);
-          write(LS_CURRENT, data || null);
-        }
-      } catch {
-        tokenStore.set(null);
-        setUser(null);
-        write(LS_CURRENT, null);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  // Map FE → BE exactly to your SignUpReq DTO
-  const signup = async (form) => {
-    const payload = {
-      firstName: form.firstName,
-      lastName: form.lastName,
-      dob: form.dob,                 // "YYYY-MM-DD"
-      doj: form.doj,                 // "YYYY-MM-DD"
-      department: form.department,
-      manager: form.manager,         // string
-      role: form.role,
-      contactNo: form.contact ?? form.contactNo, // 10 digits
-      address: form.address,
-      pincode: form.pincode,         // 6 digits
-      email: form.email,
-      password: form.password,       // 8–64 chars
-    };
-    await api.post("/api/auth/signup", payload);
-    return true; // caller can navigate to /login
-  };
+  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
+  const [user, setUser] = useState(() => {
+    const t = localStorage.getItem("token");
+    return t ? buildUserFromToken(t) : null;
+  });
 
   const login = async ({ email, password }) => {
-    // BE endpoint is /signin (not /login)
-    const { data } = await api.post("/api/auth/login", { email, password });
+    const res = await Auth.signin({ email, password });
+    const jwt = typeof res === "string" ? res : (res.accessToken || res.token || res.jwt || "");
+    if (!jwt) throw new Error("No token in response");
 
-    if (data?.token) tokenStore.set(data.token);
-
-    // Prefer user from signin response; fallback to /me
-    let nextUser = data?.user ?? null;
-    if (!nextUser) {
-      try {
-        const me = await api.get("/api/auth/me");
-        nextUser = me.data ?? null;
-      } catch { /* ignore */ }
-    }
-
-    setUser(nextUser);
-    write(LS_CURRENT, nextUser);
-    return nextUser;
+    localStorage.setItem("token", jwt);
+    setToken(jwt);
+    setUser(buildUserFromToken(jwt, email));
   };
 
-  const logout = async () => {
-    try { await api.post("/api/auth/logout"); } catch {}
-    tokenStore.set(null);
+  const signup = async (body) => {
+    await Auth.signup(body);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    setToken("");
     setUser(null);
-    write(LS_CURRENT, null);
   };
 
-  const value = useMemo(() => ({ user, loading, signup, login, logout }), [user, loading]);
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const hasRole = (r) => {
+    if (!user?.roles) return false;
+    const want = r.startsWith("ROLE_") ? r : `ROLE_${r}`;
+    return user.roles.includes(want);
+  };
+
+  const value = useMemo(
+    () => ({ token, user, isAuthed: !!token, login, signup, logout, hasRole }),
+    [token, user]
+  );
+
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
-}
+export const useAuth = () => useContext(AuthCtx);

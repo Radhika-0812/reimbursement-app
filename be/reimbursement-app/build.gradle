@@ -32,6 +32,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.security:spring-security-oauth2-jose'
 
+
+
 	// Keep Flyway 11 in the app runtime too (Boot will pick this up)
 	implementation 'org.flywaydb:flyway-core:11.7.2'
 	implementation 'org.flywaydb:flyway-database-postgresql:11.7.2'

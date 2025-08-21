@@ -1,53 +1,42 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api from "../lib/api";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import * as API from "../services/claims";
 import { useAuth } from "./AuthContext";
 
-const ClaimsContext = createContext(null);
+const ClaimsCtx = createContext(null);
 
 export function ClaimsProvider({ children }) {
-  const { user } = useAuth();
-  const [claims, setClaims] = useState([]);
+  const { token } = useAuth();
+  const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchClaims = async () => {
-    if (!user) { setClaims([]); return; }
+  const refresh = async () => {
     setLoading(true);
     try {
-      // Option A: single endpoint with server-side filtering by role
-      const { data } = await api.get("/api/claims");
-      setClaims(data ?? []);
+      const p = await API.myPending();
+      const list = Array.isArray(p) ? p : (p?.content ?? p?.data ?? []);
+      setPending(list);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchClaims(); /* eslint-disable-next-line */ }, [user?.id, user?.role]);
+  // expose createBatch so CreateClaim can call it
+  const createBatch = async (items) => API.createBatch(items);
 
-  const createClaim = async (payload) => {
-    const { data } = await api.post("/api/claims", payload);
-    // optimistic update
-    setClaims(prev => [data, ...prev]);
-  };
+  // fetch when we have a token; clear when we don't
+  useEffect(() => {
+    if (token) {
+      refresh().catch(() => {});
+    } else {
+      setPending([]);
+    }
+  }, [token]);
 
-  const managerDecide = async ({ id, approve, comment }) => {
-    const { data } = await api.post(`/api/claims/${id}/manager-decision`, { approve, comment });
-    setClaims(prev => prev.map(c => (c.id === id ? data : c)));
-  };
-
-  const financeDecide = async ({ id, approve, comment }) => {
-    const { data } = await api.post(`/api/claims/${id}/finance-decision`, { approve, comment });
-    setClaims(prev => prev.map(c => (c.id === id ? data : c)));
-  };
-
-  const value = useMemo(() => ({
-    claims, loading, fetchClaims, createClaim, managerDecide, financeDecide
-  }), [claims, loading]);
-
-  return <ClaimsContext.Provider value={value}>{children}</ClaimsContext.Provider>;
+  return (
+    <ClaimsCtx.Provider value={{ pending, loading, refresh, createBatch }}>
+      {children}
+    </ClaimsCtx.Provider>
+  );
 }
 
-export function useClaims() {
-  const ctx = useContext(ClaimsContext);
-  if (!ctx) throw new Error("useClaims must be used within ClaimsProvider");
-  return ctx;
-}
+export const useClaims = () => useContext(ClaimsCtx);

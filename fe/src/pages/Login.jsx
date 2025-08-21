@@ -14,17 +14,31 @@ export default function Login() {
 
   const onChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const onSubmit = async e => {
+  const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
+  
+    const payload = {
+      email: String(form.email || "").trim(),
+      password: String(form.password || ""),
+    };
+  
+    // ✅ DEV-ONLY DEBUG (remove before prod)
+    if (import.meta.env.DEV) {
+      console.groupCollapsed("[Login] submit payload");
+      console.log("email:", payload.email);
+      console.log("password:", "•".repeat(payload.password.length), `(${payload.password.length} chars)`);
+      console.groupEnd();
+    }
+  
     try {
-      await login(form);
+      await login(payload);
       navigate(from, { replace: true });
     } catch (e) {
       setErr(e.message || "Login failed");
     }
   };
-
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl shadow p-6">
@@ -81,10 +95,6 @@ export default function Login() {
             <Link to="/signup" className="text-blue-700 hover:underline">Create one</Link>
           </div>
         </form>
-
-        <div className="mt-6 text-xs text-gray-500">
-          Tip: Default admin exists — <b>admin@demo.com / admin123</b>
-        </div>
       </div>
     </div>
   );

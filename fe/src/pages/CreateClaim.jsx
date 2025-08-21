@@ -1,81 +1,91 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../state/AuthContext";
 import { useClaims } from "../state/ClaimsContext";
 import NavBar from "../components/NavBar";
-import api from "../lib/api";
 
-/** Category metadata + required docs (shown on the form) */
-const CATEGORIES = [
-  {
-    id: "travel",
-    title: "Travel Reimbursement",
-    desc: "Flights, trains, cabs, mileage",
-    requiredDocs: ["Tickets/Invoices", "Boarding pass (if flight)", "Payment proof"],
-    fields: [
-      { name: "tripFrom", label: "From" },
-      { name: "tripTo", label: "To" },
-      { name: "startDate", label: "Start Date", type: "date" },
-      { name: "endDate", label: "End Date", type: "date" },
-      { name: "mode", label: "Mode", type: "select", options: ["Flight", "Train", "Cab", "Own Vehicle"] },
-    ],
-  },
-  {
-    id: "food",
-    title: "Food / Meals",
-    desc: "Meals during official travel/work",
-    requiredDocs: ["Restaurant bill", "Payment proof"],
-    fields: [
-      { name: "date", label: "Date", type: "date" },
-      { name: "mealType", label: "Meal Type", type: "select", options: ["Breakfast", "Lunch", "Dinner", "Snacks"] },
-    ],
-  },
-  {
-    id: "medical",
-    title: "Medical",
-    desc: "Doctor fees, medicines, tests",
-    requiredDocs: ["Prescription (if applicable)", "Bills/Invoices"],
-    fields: [
-      { name: "date", label: "Date", type: "date" },
-      { name: "provider", label: "Hospital/Clinic" },
-      { name: "type", label: "Type", type: "select", options: ["Consultation", "Medicine", "Lab Test", "Procedure"] },
-    ],
-  },
-  {
-    id: "misc",
-    title: "Miscellaneous",
-    desc: "Stationery, communication, others",
-    requiredDocs: ["Bill/Invoice", "Payment proof"],
-    fields: [
-      { name: "date", label: "Date", type: "date" },
-      { name: "purpose", label: "Purpose" },
-    ],
-  },
+// Keep in sync with backend enum com.rms.reimbursement_app.domain.ClaimType
+const CLAIM_TYPES = [
+  "PETROL_ALLOWANCE",
+  "CAB_ALLOWANCE",
+  "MEAL",
+  "OFFICE_SUPPLY",
+  "POSTAGE",
 ];
 
-/** S3 upload stub: replace with your backend presign flow */
-async function uploadToS3(file) {
-  if (!file) return null;
-  // 1) Ask BE for a presigned URL
-  const { data } = await api.post("/api/files/presign", {
-    contentType: file.type,
-    fileName: file.name
-  });
-  // Expect { uploadUrl, publicUrl, key }
-  await fetch(data.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-  return data.publicUrl ?? data.key; // save this in claim
+function blankRow() {
+  return {
+    title: "",
+    amountCents: "",
+    claimType: CLAIM_TYPES[0],
+    description: "",
+    receiptUrl: "",
+    _file: null, // local only
+  };
 }
 
 export default function CreateClaim() {
-  const [openId, setOpenId] = React.useState(null);
-  const [selected, setSelected] = React.useState(null);
   const navigate = useNavigate();
+  const { createBatch } = useClaims();
+  const [rows, setRows] = React.useState([blankRow()]);
+  const [err, setErr] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
 
-  const toggle = (id) => setOpenId((prev) => (prev === id ? null : id));
-  const selectCategory = (id) => {
-    setSelected(id);
-    setOpenId(id);
-  };
+  const update = (idx, key, val) =>
+    setRows((r) => r.map((row, i) => (i === idx ? { ...row, [key]: val } : row)));
+
+  const addRow = () => setRows((r) => [...r, blankRow()]);
+  const removeRow = (idx) => setRows((r) => r.filter((_, i) => i !== idx));
+
+  async function getPresignedUrl(file) {
+    const res = await fetch(`${import.meta.env.VITE_API_BASE.replace(/\/$/, "")}/api/files/presign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json(); // { url, key }
+  }
+
+  async function uploadToS3(url, file) {
+    const res = await fetch(url, { method: "PUT", body: file });
+    if (!res.ok) throw new Error("S3 upload failed");
+  }
+
+  async function attachFile(idx, file) {
+    if (!file) return;
+    setErr("");
+    try {
+      const { url, key } = await getPresignedUrl(file);
+      await uploadToS3(url, file);
+      update(idx, "receiptUrl", `s3://${key}`);
+      update(idx, "_file", file); // keep for UI feedback
+    } catch (e) {
+      setErr(e.message || "File upload failed");
+    }
+  }
+
+  async function submit() {
+    setErr("");
+    setBusy(true);
+    try {
+      const payload = rows.map((r) => ({
+        title: String(r.title || ""),
+        amountCents: Math.round(Number(r.amountCents || 0)),
+        claimType: String(r.claimType),
+        description: r.description ? String(r.description) : undefined,
+        receiptUrl: r.receiptUrl || undefined,
+      }));
+      if (!payload.length) throw new Error("Add at least one claim row");
+      await createBatch(payload);
+      setRows([blankRow()]);
+      alert("Claims submitted");
+      navigate("/pending");
+    } catch (e) {
+      setErr(e.message || "Submit failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -90,206 +100,118 @@ export default function CreateClaim() {
         </button>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Categories (accordion list) */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 divide-y">
-            {CATEGORIES.map((cat) => (
-              <div key={cat.id}>
-                <button
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50"
-                  onClick={() => toggle(cat.id)}
-                  aria-expanded={openId === cat.id}
-                >
-                  <span className="text-left">
-                    <div className="text-sm font-medium text-gray-900">{cat.title}</div>
-                    <div className="text-xs text-gray-500">{cat.desc}</div>
-                  </span>
-                  <svg
-                    className={`h-5 w-5 text-gray-500 transition-transform ${openId === cat.id ? "rotate-180" : ""}`}
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </button>
+      <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
+        {err && <div className="mb-4 text-sm text-red-600">{err}</div>}
 
-                {openId === cat.id && (
-                  <div className="px-4 pb-4">
-                    <button
-                      onClick={() => selectCategory(cat.id)}
-                      className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-950 px-3 py-1.5 text-white text-sm hover:bg-blue-900"
-                    >
-                      Start {cat.title} Form
-                    </button>
-                    {/* quick doc hints */}
-                    <ul className="mt-3 ml-5 list-disc text-xs text-gray-500">
-                      {cat.requiredDocs.map((d) => (
-                        <li key={d}>{d}</li>
-                      ))}
-                    </ul>
-                  </div>
+        <div className="space-y-4">
+          {rows.map((r, idx) => (
+            <div key={idx} className="border border-gray-200 rounded-lg p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
+                <label className="block text-sm sm:col-span-2">
+                  <span className="text-gray-700">Title</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    value={r.title}
+                    onChange={(e) => update(idx, "title", e.target.value)}
+                    placeholder="Cab to office"
+                    required
+                  />
+                </label>
+
+                <label className="block text-sm sm:col-span-2">
+                  <span className="text-gray-700">Amount (₹)</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    value={r.amountCents}
+                    onChange={(e) => update(idx, "amountCents", e.target.value)}
+                    placeholder="550.00"
+                    required
+                  />
+                </label>
+
+                <label className="block text-sm sm:col-span-2">
+                  <span className="text-gray-700">Claim Type</span>
+                  <select
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    value={r.claimType}
+                    onChange={(e) => update(idx, "claimType", e.target.value)}
+                  >
+                    {CLAIM_TYPES.map((ct) => (
+                      <option key={ct} value={ct}>
+                        {ct}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm sm:col-span-6">
+                  <span className="text-gray-700">Description</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    value={r.description}
+                    onChange={(e) => update(idx, "description", e.target.value)}
+                    placeholder="Airport drop"
+                  />
+                </label>
+
+                <label className="block text-sm sm:col-span-6">
+                  <span className="text-gray-700">Receipt (S3)</span>
+                  <input
+                    type="file"
+                    onChange={(e) => attachFile(idx, e.target.files?.[0] || null)}
+                    className="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-blue-900 hover:file:bg-blue-100"
+                  />
+                  {r.receiptUrl && (
+                    <div className="mt-1 text-xs text-green-700">
+                      Attached: <code>{r.receiptUrl}</code>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => removeRow(idx)}
+                  className="rounded-md border px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+                >
+                  Remove row
+                </button>
+                {idx === rows.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={addRow}
+                    className="rounded-md border px-3 py-1.5 text-sm text-blue-900 hover:bg-blue-50"
+                  >
+                    + Add row
+                  </button>
                 )}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
 
-        {/* Dynamic form */}
-        <div className="lg:col-span-2">
-          {!selected ? (
-            <div className="h-full min-h-64 flex items-center justify-center border border-dashed border-gray-300 rounded-xl bg-white">
-              <p className="text-sm text-gray-500 px-6 text-center">
-                Select a category on the left to begin filling the form.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
-              <FormRenderer categories={CATEGORIES} selectedId={selected} />
-            </div>
-          )}
+        <div className="pt-4 flex items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={submit}
+            className="rounded-md bg-blue-950 px-4 py-2 text-white hover:bg-blue-900 disabled:opacity-60"
+          >
+            {busy ? "Submitting..." : "Submit"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRows([blankRow()])}
+            className="rounded-md border px-4 py-2 text-gray-700 hover:bg-gray-50"
+          >
+            Reset
+          </button>
         </div>
       </div>
     </div>
     </div>
-  );
-}
-
-function FormRenderer({ categories, selectedId }) {
-  const cat = categories.find((c) => c.id === selectedId);
-  if (!cat) return null;
-  return <GenericForm category={cat} />;
-}
-
-function GenericForm({ category }) {
-  const [values, setValues] = React.useState({ amount: "", notes: "", attachment: null });
-  const { user, users } = useAuth();
-  const { createClaim } = useClaims();
-  const navigate = useNavigate();
-
-  const onChange = (e) => {
-    const { name, value, files } = e.target;
-    setValues((v) => ({ ...v, [name]: files ? files[0] : value }));
-  };
-
-  // Resolve managerId (prefer manager email from signup)
-  const resolveManagerId = () => {
-    if (user.managerId) return user.managerId;
-    if (user.manager) {
-      const email = String(user.manager).toLowerCase();
-      const mm = users.find((u) => (u.email || "").toLowerCase() === email);
-      if (mm) return mm.id;
-    }
-    return null;
-  };
-
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    const s3Key = await uploadToS3(values.attachment);
-    const payload = { ...values, attachment: s3Key, category: category.id };
-    createClaim({
-      userId: user.id,
-      managerId: resolveManagerId(),
-      category: category.id,
-      amount: Number(values.amount || 0),
-      payload,
-    });
-    navigate("/pending-claims");
-  };
-
-  return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {/* Details */}
-      <fieldset className="border border-gray-200 rounded-lg p-4">
-        <legend className="px-2 text-sm font-semibold text-gray-700">{category.title} Details</legend>
-        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {category.fields.map((f) =>
-            f.type === "select" ? (
-              <label key={f.name} className="block text-sm">
-                <span className="text-gray-700">{f.label}</span>
-                <select
-                  name={f.name}
-                  onChange={onChange}
-                  className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                  {f.options.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label key={f.name} className="block text-sm">
-                <span className="text-gray-700">{f.label}</span>
-                <input
-                  name={f.name}
-                  type={f.type || "text"}
-                  onChange={onChange}
-                  className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-              </label>
-            )
-          )}
-
-          <label className="block text-sm">
-            <span className="text-gray-700">Amount (₹)</span>
-            <input
-              name="amount"
-              type="number"
-              step="0.01"
-              value={values.amount}
-              onChange={onChange}
-              required
-              className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-          </label>
-        </div>
-      </fieldset>
-
-      {/* Attachments */}
-      <fieldset className="border border-gray-200 rounded-lg p-4">
-        <legend className="px-2 text-sm font-semibold text-gray-700">Attachments (S3)</legend>
-        <label className="block text-sm">
-          <span className="text-gray-700">Upload Document</span>
-          <input
-            type="file"
-            name="attachment"
-            onChange={onChange}
-            className="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-blue-900 hover:file:bg-blue-100"
-          />
-        </label>
-        <label className="block text-sm mt-2">
-          <span className="text-gray-700">Notes (optional)</span>
-          <textarea
-            name="notes"
-            rows={3}
-            onChange={onChange}
-            className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
-          />
-        </label>
-        <div className="mt-3">
-          <div className="text-xs text-gray-500">Required documents:</div>
-          <ul className="ml-5 list-disc text-xs text-gray-500">
-            {category.requiredDocs.map((d) => (
-              <li key={d}>{d}</li>
-            ))}
-          </ul>
-        </div>
-      </fieldset>
-
-      <div className="pt-2 flex items-center gap-3">
-        <button type="submit" className="rounded-md bg-blue-950 px-4 py-2 text-white hover:bg-blue-900">
-          Submit
-        </button>
-        <button type="reset" className="rounded-md border px-4 py-2 text-gray-700 hover:bg-gray-50">
-          Reset
-        </button>
-      </div>
-    </form>
   );
 }
