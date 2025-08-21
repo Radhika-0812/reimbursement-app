@@ -11,6 +11,7 @@ import java.time.Instant;
 public class AdminClaimView {
     Long id;
     Long userId;
+    String userName;
     String title;
     long amountCents;
     ClaimType claimType;
@@ -22,6 +23,7 @@ public class AdminClaimView {
         return new AdminClaimView(
                 c.getId(),
                 c.getUserId(),
+                c.getUserName(),
                 c.getTitle(),
                 c.getAmountCents(),
                 c.getClaimType(),
