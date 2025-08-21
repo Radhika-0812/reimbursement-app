@@ -87,7 +87,7 @@ export default function HomePage() {
           
           {/* Pie: claims per category (no labels, no legend) */}
           <div className="rounded-xl border bg-white p-4">
-          <div className="text-sm text-gray-600 mb-2">Claims by category</div>
+          <div className="text-sm text-gray-600 mb-2"> Pending Claims by category</div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
