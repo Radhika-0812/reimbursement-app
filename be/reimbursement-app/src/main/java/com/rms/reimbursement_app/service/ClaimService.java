@@ -8,6 +8,9 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 
 import java.util.List;
 
@@ -70,5 +73,20 @@ public class ClaimService {
         var saved = repo.save(c);
         // em.flush(); em.refresh(saved);
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Claim> getAllPending(Pageable pageable) {
+        return repo.findByStatus(ClaimStatus.PENDING, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Claim> getAllApproved(Pageable pageable) {
+        return repo.findByStatus(ClaimStatus.APPROVED, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Claim> getAllRejected(Pageable pageable) {
+        return repo.findByStatus(ClaimStatus.REJECTED, pageable);
     }
 }
