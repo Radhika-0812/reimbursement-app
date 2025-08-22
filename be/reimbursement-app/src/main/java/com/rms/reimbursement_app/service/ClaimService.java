@@ -12,7 +12,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -89,4 +91,25 @@ public class ClaimService {
     public Page<Claim> getAllRejected(Pageable pageable) {
         return repo.findByStatus(ClaimStatus.REJECTED, pageable);
     }
+
+    @Transactional(readOnly = true)
+    public List<Claim> myRejected(Long userId) {
+        return repo.findAllByUserIdAndStatusOrderByCreatedAtDesc(userId, ClaimStatus.REJECTED);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Claim> myApproved(Long userId) {
+        return repo.findAllByUserIdAndStatusOrderByCreatedAtDesc(userId, ClaimStatus.APPROVED);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Claim> myClosed(Long userId) {
+        var approved = myApproved(userId);
+        var rejected = myRejected(userId);
+        return Stream.concat(approved.stream(), rejected.stream())
+                // If you have createdAt, keep newest first:
+                .sorted(Comparator.comparing(Claim::getCreatedAt).reversed())
+                .toList();
+    }
+
 }

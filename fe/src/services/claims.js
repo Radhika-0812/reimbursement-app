@@ -11,25 +11,31 @@ export function createBatch(items) {
     receiptUrl: x.receiptUrl ? String(x.receiptUrl) : undefined,
   }));
   // BACKEND: @PostMapping("/") => POST /api/claims
+  // (If your backend uses /api/claims/batch, change the URL here to match)
   return http("/api/claims", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export function myPending() {
+  // returns array or Page depending on backend; your context already normalizes
+  return http("/api/claims/me/pending", { method: "GET" });
+}
 
-export async function myPending() {
-    const res = await http("/api/claims/me/pending", { method: "GET" });
-    console.log("[pending]", res);
-    return res;
-  }
-  
+export function myClosed() {
+  // returns array or Page depending on backend; your context already normalizes
+  return http("/api/claims/me/closed", { method: "GET" });
+}
 
-// You don't have a backend endpoint yet for "closed":
-// export function myClosed() {
-//   // Either implement /api/claims/me/closed in backend (see below)
-//   // or temporarily return an empty list to avoid 404s.
-//   return http("/api/claims/me/closed", { method: "GET" });
-// }
 
-// --- Admin endpoints stay as-is if your AdminClaimController matches them
+// ✅ Changed to use the same http wrapper (keeps auth/headers consistent)
+export function myApproved() {
+  return http("/api/claims/me/approved", { method: "GET" });
+}
+
+export function myRejected() {
+  return http("/api/claims/me/rejected", { method: "GET" });
+}
+
+// --- Admin endpoints (unchanged)
 export function adminCounts() {
   return http("/api/admin/claims/counts", { method: "GET" });
 }

@@ -41,7 +41,7 @@ export default function Signup() {
   
     try {
       await signup(payload);      // from AuthContext (Option B)
-      navigate("/login");
+      navigate("/admin");
     } catch (err) {
       setErr(err.message || "Signup failed");
     }
@@ -95,8 +95,8 @@ export default function Signup() {
           </button>
 
           <div className="text-sm text-center text-gray-600">
-            Already have an account?{" "}
-            <Link to="/login" className="text-blue-700 hover:underline">Sign in</Link>
+          Redirect to {" "}
+            <Link to="/admin" className="text-blue-700 hover:underline"> Home</Link>
           </div>
         </form>
       </div>

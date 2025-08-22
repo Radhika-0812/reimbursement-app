@@ -31,4 +31,35 @@ public class ClaimController {
         Long userId = Long.valueOf(jwt.getClaim("uid").toString());
         return service.myPending(userId).stream().map(ClaimResponse::from).toList();
     }
+
+
+    @GetMapping("/me/rejected")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public List<ClaimResponse> getMyRejectedClaims(@AuthenticationPrincipal Jwt jwt) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        return service.myRejected(userId)
+                .stream()
+                .map(ClaimResponse::from) // convert entity → DTO
+                .toList();
+    }
+
+    @GetMapping("/me/approved")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public List<ClaimResponse> getMyApprovedClaims(@AuthenticationPrincipal Jwt jwt) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        return service.myApproved(userId)
+                .stream()
+                .map(ClaimResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/me/closed")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public List<ClaimResponse> getMyClosed(@AuthenticationPrincipal Jwt jwt) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        return service.myClosed(userId).stream()
+                .map(ClaimResponse::from)
+                .toList();
+    }
+
 }

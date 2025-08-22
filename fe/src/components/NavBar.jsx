@@ -64,7 +64,7 @@ export default function NavBar({ title = "Reimbursement Portal", className = "" 
             </button>
           </div>
 
-          {/* Middle: Centered nav buttons (users only) */}
+          {/* Middle: Centered nav buttons */}
           {showNavLinks && !isAdmin && (
             <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-6">
               <button onClick={() => navigate("/")} className="text-white hover:text-gray-300">Home</button>
@@ -74,10 +74,22 @@ export default function NavBar({ title = "Reimbursement Portal", className = "" 
             </div>
           )}
 
+          {/* ✅ Middle: Admin-only single CTA */}
+          {showNavLinks && isAdmin && (
+            <div className="hidden md:flex absolute left-1/4 -translate-x-1/4 items-center">
+              <button
+                onClick={() => navigate("/signup")}
+                className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20"
+              >
+                Create Employee
+              </button>
+            </div>
+          )}
+
           {/* Right: Profile & mobile menu */}
           {showNavLinks && (
             <div className="flex items-center gap-2">
-              {/* mobile menu button (hidden for admins, since no links to show) */}
+              {/* Mobile: user-only hamburger */}
               {!isAdmin && (
                 <button
                   onClick={() => setMenuOpen(v => !v)}
@@ -87,6 +99,16 @@ export default function NavBar({ title = "Reimbursement Portal", className = "" 
                   <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
                     <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
+                </button>
+              )}
+
+              {/* ✅ Mobile: admin-only quick CTA */}
+              {isAdmin && (
+                <button
+                  onClick={() => navigate("/signup")}
+                  className="md:hidden px-3 py-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20"
+                >
+                  Create Employee
                 </button>
               )}
 
@@ -102,7 +124,6 @@ export default function NavBar({ title = "Reimbursement Portal", className = "" 
                     alt="User avatar"
                     className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover"
                   />
-                  {/* Name next to the avatar */}
                   {displayName && (
                     <span className="hidden xs:block text-white text-sm font-medium max-w-[12rem] truncate">
                       {displayName}
@@ -136,11 +157,10 @@ export default function NavBar({ title = "Reimbursement Portal", className = "" 
           )}
         </div>
 
-        {/* Mobile dropdown (users only; admins have no buttons) */}
+        {/* Mobile dropdown (users only; admins get the single CTA above) */}
         {showNavLinks && !isAdmin && menuOpen && (
           <div className="md:hidden pb-3">
             <div className="flex flex-col gap-2 pt-2 items-center">
-              {/* Center-align on mobile too */}
               <button onClick={() => { setMenuOpen(false); navigate("/"); }} className="text-white">Home</button>
               <button onClick={() => { setMenuOpen(false); navigate("/create"); }} className="text-white">New Claim</button>
               <button onClick={() => { setMenuOpen(false); navigate("/pending"); }} className="text-white">Pending Claims</button>

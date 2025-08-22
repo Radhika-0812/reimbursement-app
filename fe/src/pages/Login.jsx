@@ -90,10 +90,10 @@ export default function Login() {
             Sign in
           </button>
 
-          <div className="text-sm text-center text-gray-600">
+          {/* <div className="text-sm text-center text-gray-600">
             No account?{" "}
             <Link to="/signup" className="text-blue-700 hover:underline">Create one</Link>
-          </div>
+          </div> */}
         </form>
       </div>
     </div>

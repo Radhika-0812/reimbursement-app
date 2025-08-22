@@ -14,31 +14,38 @@ import { Toaster } from "react-hot-toast";
 import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
 
-// Simple protected wrapper (token presence)
-function Protected({ children }) {
-  const isAuthed = !!localStorage.getItem("token");
-  return isAuthed ? children : <Navigate to="/login" replace />;
+/** Helpers */
+const isAdminUser = (user) =>
+  !!user &&
+  (user.role === "ADMIN" ||
+    (Array.isArray(user.roles) &&
+      (user.roles.includes("ROLE_ADMIN") || user.roles.includes("ADMIN"))));
+
+/** Require auth for any route */
+function RequireAuth({ children }) {
+  const { token } = useAuth();
+  return token ? children : <Navigate to="/login" replace />;
 }
 
-// Gate home: admins → /admin, others → welcome/home
-function HomeGate() {
-  const { user } = useAuth();
-  const isAdmin = !!user && (
-    user.role === "ADMIN" ||
-    (Array.isArray(user.roles) && (user.roles.includes("ROLE_ADMIN") || user.roles.includes("ADMIN")))
-  );
-  return isAdmin ? <Navigate to="/admin" replace /> : <HomePage />;
-}
-
-// Only admins can open /admin
+/** Only admins can open */
 function RequireAdmin({ children }) {
   const { user } = useAuth();
   const loc = useLocation();
-  const isAdmin = !!user && (
-    user.role === "ADMIN" ||
-    (Array.isArray(user.roles) && (user.roles.includes("ROLE_ADMIN") || user.roles.includes("ADMIN")))
-  );
-  return isAdmin ? children : <Navigate to="/" state={{ from: loc }} replace />;
+  return isAdminUser(user) ? children : <Navigate to="/" state={{ from: loc }} replace />;
+}
+
+/** Root gate */
+function RootGate() {
+  const { token, user } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  return isAdminUser(user) ? <Navigate to="/admin" replace /> : <HomePage />;
+}
+
+/** Login gate */
+function LoginGate() {
+  const { token, user } = useAuth();
+  if (token) return <Navigate to={isAdminUser(user) ? "/admin" : "/"} replace />;
+  return <Login />;
 }
 
 export default function App() {
@@ -46,25 +53,76 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ClaimsProvider>
-        <div className="flex flex-col min-h-screen">  
-          <NavBar />
-          <main className="flex-1">   
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/create"  element={<Protected><CreateClaim /></Protected>} />
-            <Route path="/pending" element={<Protected><PendingClaims /></Protected>} />
-            <Route path="/closed"  element={<Protected><ClosedClaims /></Protected>} />
-            <Route path="/profile" element={<Protected><Profile /></Protected>} />
+          <div className="flex flex-col min-h-screen">
+            <NavBar />
+            <main className="flex-1">
+              <Routes>
+                {/* Public (guarded so authed users don't see login again) */}
+                <Route path="/login" element={<LoginGate />} />
 
-            {/* Admin only */}
-            <Route path="/admin" element={<Protected><RequireAdmin><AdminDashboard /></RequireAdmin></Protected>} />
+                {/* Signup is ADMIN-ONLY */}
+                <Route
+                  path="/signup"
+                  element={
+                    <RequireAuth>
+                      <RequireAdmin>
+                        <Signup />
+                      </RequireAdmin>
+                    </RequireAuth>
+                  }
+                />
 
-            {/* Home gate: admins auto → /admin */}
-            <Route path="/" element={<HomeGate />} />
-          </Routes>
-          </main>
-          <Footer />
+                {/* Protected user routes */}
+                <Route
+                  path="/create"
+                  element={
+                    <RequireAuth>
+                      <CreateClaim />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/pending"
+                  element={
+                    <RequireAuth>
+                      <PendingClaims />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/closed"
+                  element={
+                    <RequireAuth>
+                      <ClosedClaims />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <RequireAuth>
+                      <Profile />
+                    </RequireAuth>
+                  }
+                />
+
+                {/* Admin only */}
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireAuth>
+                      <RequireAdmin>
+                        <AdminDashboard />
+                      </RequireAdmin>
+                    </RequireAuth>
+                  }
+                />
+
+                {/* Home */}
+                <Route path="/" element={<RootGate />} />
+              </Routes>
+            </main>
+            <Footer />
           </div>
           <Toaster position="top-right" reverseOrder={false} />
         </ClaimsProvider>
