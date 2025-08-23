@@ -11,6 +11,6 @@ import java.util.*;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
-    boolean existsByNameIgnoreCase(@NotBlank @Size(max = 30) String name);
+//    boolean existsByNameIgnoreCase(@NotBlank @Size(max = 30) String email);
 }
 

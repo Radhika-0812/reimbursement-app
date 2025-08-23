@@ -34,10 +34,7 @@ public class AuthService {
         users.findByEmail(req.email().trim().toLowerCase())
                 .ifPresent(u -> { throw new IllegalArgumentException("Email already exists"); });
 
-        // Optional: only if you actually created this repository method/constraint
-        if (users.existsByNameIgnoreCase(req.name().trim())) {
-            throw new IllegalArgumentException("Name already taken");
-        }
+
 
         var u = new User();
         u.setName(req.name().trim());

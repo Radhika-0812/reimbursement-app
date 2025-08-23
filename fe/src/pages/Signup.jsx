@@ -9,7 +9,7 @@ export default function Signup() {
 
   const [form, setForm] = useState({
     name: "", department: "", contactNo: "",
-    address: "", pincode: "", email: "", password: "",
+    address: "", pincode: "", designation: "", email: "", password: "",
   });
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
@@ -34,6 +34,7 @@ export default function Signup() {
       department: form.department,
       contactNo: form.contactNo,  // service maps this to 'contact'
       address: form.address,
+      designation :form.designation,
       pincode: form.pincode,
       email: form.email,
       password: form.password,
@@ -58,6 +59,7 @@ export default function Signup() {
         <form onSubmit={onSubmit} className="mt-5 space-y-4">
           <Input label="Full Name" name="name" value={form.name} onChange={onChange} required />
           <Input label="Department" name="department" value={form.department} onChange={onChange} required />
+          <Input label="Designation" name="designation" value={form.designation} onChange={onChange} required />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input type="tel" label="Contact No" name="contactNo" value={form.contactNo} onChange={onChange} required />

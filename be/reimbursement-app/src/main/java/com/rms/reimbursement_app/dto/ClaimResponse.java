@@ -2,20 +2,22 @@ package com.rms.reimbursement_app.dto;
 
 import com.rms.reimbursement_app.domain.*;
 import lombok.*;
+import java.math.BigDecimal;
+import java.sql.Struct;
 import java.time.Instant;
 
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@Getter
-@Setter
 public class ClaimResponse {
     private Long id;
     private Long userId;
     private String userName;
     private String title;
+    private String userEmail;
     private Long amountCents;
+    private BigDecimal amountRupees;   // computed for display
     private ClaimType claimType;
     private String description;
     private String receiptUrl;
@@ -23,14 +25,21 @@ public class ClaimResponse {
     private String adminComment;
     private Instant createdAt;
     private Instant updatedAt;
+    private String designation;
+    private boolean hasReceipt;        // <- FE uses this to show/hide "View receipt"
 
     public static ClaimResponse from(Claim c) {
+        boolean hasReceipt = (c.getReceiptSize() != null && c.getReceiptSize() > 0)
+                || (c.getReceiptFile() != null && c.getReceiptFile().length > 0);
+
         return ClaimResponse.builder()
                 .id(c.getId())
                 .userId(c.getUserId())
                 .userName(c.getUserName())
                 .title(c.getTitle())
+                .userEmail(c.getUserEmail())
                 .amountCents(c.getAmountCents())
+                .amountRupees(centsToRupees(c.getAmountCents()))
                 .claimType(c.getClaimType())
                 .description(c.getDescription())
                 .receiptUrl(c.getReceiptUrl())
@@ -38,6 +47,13 @@ public class ClaimResponse {
                 .adminComment(c.getAdminComment())
                 .createdAt(c.getCreatedAt())
                 .updatedAt(c.getUpdatedAt())
+                .designation(c.getDesignation())
+                .hasReceipt(hasReceipt)
                 .build();
+    }
+
+    private static BigDecimal centsToRupees(Long cents) {
+        if (cents == null) return BigDecimal.ZERO;
+        return BigDecimal.valueOf(cents, 2); // divide by 100 with scale=2
     }
 }

@@ -15,7 +15,3 @@ export async function getPresignedUrl(filename, contentType) {
 }
 
 // Upload the file directly to S3 with the presigned URL
-export async function uploadToS3(presignedUrl, file) {
-  const res = await fetch(presignedUrl, { method: "PUT", body: file });
-  if (!res.ok) throw new Error("S3 upload failed");
-}

@@ -13,6 +13,7 @@ public class User {
     @Column(nullable = false, length = 30) private String department;
     @Column(nullable = false, length = 100) private String address;
     @Column(nullable = false, length = 10) private String contact;
+    @Column(nullable = false, length = 30) private String designation;
     @Column(nullable = false, length = 6) private String pincode;
 
 }

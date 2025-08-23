@@ -77,4 +77,7 @@ public class AdminClaimController {
         int page = Math.max(0, pageable.getPageNumber());
         return PageRequest.of(page, size, sort);
     }
+
+
+
 }

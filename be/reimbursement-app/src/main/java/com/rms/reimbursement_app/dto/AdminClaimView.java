@@ -12,11 +12,15 @@ public class AdminClaimView {
     Long id;
     Long userId;
     String userName;
+    String userEmail;
     String title;
     long amountCents;
     ClaimType claimType;
     String description;
+    String adminComment;
     String receiptUrl;
+    String designation;
+
     Instant createdAt;   // assuming Claim has createdAt
 
     public static AdminClaimView from(Claim c) {
@@ -24,11 +28,14 @@ public class AdminClaimView {
                 c.getId(),
                 c.getUserId(),
                 c.getUserName(),
+                c.getUserEmail(),
                 c.getTitle(),
                 c.getAmountCents(),
                 c.getClaimType(),
                 c.getDescription(),
                 c.getReceiptUrl(),
+                c.getAdminComment(),
+                c.getDesignation(),
                 c.getCreatedAt()
         );
     }

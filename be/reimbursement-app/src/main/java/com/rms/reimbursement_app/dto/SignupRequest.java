@@ -22,6 +22,10 @@ public record SignupRequest(
         String department,
 
         @NotBlank
+        @Size(max = 30)
+        String designation,
+
+        @NotBlank
         @Size(max = 100)
         String address,
 

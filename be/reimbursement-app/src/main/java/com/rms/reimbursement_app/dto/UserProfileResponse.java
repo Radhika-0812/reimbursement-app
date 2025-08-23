@@ -7,7 +7,9 @@ public record UserProfileResponse(
         String email,
         String department,
         String address,
-        String contactNo
+        String contactNo,
+        String designation,
+        String pincode
 ) {
     public static UserProfileResponse from(User u) {
         return new UserProfileResponse(
@@ -15,7 +17,9 @@ public record UserProfileResponse(
                 u.getEmail(),
                 u.getDepartment(),
                 u.getAddress(),
-                u.getContact()
+                u.getContact(),
+                u.getDesignation(),
+                u.getPincode()
         );
     }
 }

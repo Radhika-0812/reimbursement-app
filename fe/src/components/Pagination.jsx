@@ -25,7 +25,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <button
         onClick={() => canPrev && onPage(page - 1)}
         disabled={!canPrev}
-        className="px-3 py-1.5 rounded-md border disabled:opacity-50"
+        className="px-3 py-1.5 rounded-md border  bg-blue-950 text-white border-white-950"  
       >
         Prev
       </button>
@@ -39,7 +39,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
               key={idx}
               onClick={() => onPage(p.v)}
               className={`px-3 py-1.5 rounded-md border ${
-                p.v === page ? "bg-blue-950 text-white border-blue-950" : "hover:bg-gray-50"
+                p.v === page ? "bg-blue-950 text-white border-white-950" : "hover:bg-gray-50"
               }`}
             >
               {p.label}
@@ -51,7 +51,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <button
         onClick={() => canNext && onPage(page + 1)}
         disabled={!canNext}
-        className="px-3 py-1.5 rounded-md border disabled:opacity-50"
+        className="px-3 py-1.5 rounded-md border  bg-blue-950 text-white border-white-950"
       >
         Next
       </button>

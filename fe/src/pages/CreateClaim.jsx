@@ -1,8 +1,9 @@
+// src/pages/CreateClaim.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useClaims } from "../state/ClaimsContext";
-import NavBar from "../components/NavBar";
-import toast from "react-hot-toast";   
+import { useAuth } from "../state/AuthContext";       // <-- to get JWT
+import toast from "react-hot-toast";
 
 // Keep in sync with backend enum com.rms.reimbursement_app.domain.ClaimType
 const CLAIM_TYPES = [
@@ -16,20 +17,23 @@ const CLAIM_TYPES = [
 function blankRow() {
   return {
     title: "",
-    amountCents: "",
+    amountCents: "",          // UI shows ₹; we convert to cents on submit
     claimType: CLAIM_TYPES[0],
     description: "",
-    receiptUrl: "",
-    _file: null, // local only
+    _file: null,              // local only; uploaded after the claim is created
   };
 }
 
 export default function CreateClaim() {
   const navigate = useNavigate();
   const { createBatch } = useClaims();
+  const auth = useAuth();
+
   const [rows, setRows] = React.useState([blankRow()]);
   const [err, setErr] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+
+  const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
   const update = (idx, key, val) =>
     setRows((r) => r.map((row, i) => (i === idx ? { ...row, [key]: val } : row)));
@@ -37,59 +41,89 @@ export default function CreateClaim() {
   const addRow = () => setRows((r) => [...r, blankRow()]);
   const removeRow = (idx) => setRows((r) => r.filter((_, i) => i !== idx));
 
-  async function getPresignedUrl(file) {
-    const res = await fetch(`${import.meta.env.VITE_API_BASE.replace(/\/$/, "")}/api/files/presign`, {
+  // Try to get Authorization header from AuthContext; fallback to localStorage if needed
+  async function authHeaders() {
+    let token = null;
+    if (auth?.getAccessToken) token = await auth.getAccessToken();
+    else if (auth?.token) token = auth.token;
+    else token = localStorage.getItem("token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  // Upload one file to /api/claims/{id}/receipt (multipart/form-data)
+  async function uploadReceipt(claimId, file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const headers = await authHeaders(); // Authorization only; don't set Content-Type manually
+    const res = await fetch(`${API_BASE}/api/claims/${claimId}/receipt`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      headers,
+      body: fd,
     });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json(); // { url, key }
-  }
-
-  async function uploadToS3(url, file) {
-    const res = await fetch(url, { method: "PUT", body: file });
-    if (!res.ok) throw new Error("S3 upload failed");
-  }
-
-  async function attachFile(idx, file) {
-    if (!file) return;
-    setErr("");
-    try {
-      const { url, key } = await getPresignedUrl(file);
-      await uploadToS3(url, file);
-      update(idx, "receiptUrl", `s3://${key}`);
-      update(idx, "_file", file); // keep for UI feedback
-    } catch (e) {
-      setErr(e.message || "File upload failed");
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Upload failed for claim ${claimId}`);
     }
+    return res.json(); // { claimId, filename, contentType, size }
   }
 
   async function submit() {
     setErr("");
     setBusy(true);
     try {
+      // Build payload for createBatch (convert ₹ to cents)
       const payload = rows.map((r) => ({
         title: String(r.title || ""),
-        amountCents: Math.round(Number(r.amountCents || 0)),
+        amountCents: Math.round(Number(r.amountCents || 0)  ), // ₹ -> cents
         claimType: String(r.claimType),
         description: r.description ? String(r.description) : undefined,
-        receiptUrl: r.receiptUrl || undefined,
+        // receiptUrl removed; we now upload file AFTER create
       }));
       if (!payload.length) throw new Error("Add at least one claim row");
-      await createBatch(payload);
+
+      // 1) Create the claims
+      const created = await createBatch(payload); // expects array of ClaimResponse { id, ... }
+      if (!Array.isArray(created)) {
+        throw new Error("Create API did not return an array");
+      }
+      if (created.length !== rows.length) {
+        // We assume the backend returns one created claim per row in the same order.
+        // If not, you can map by title or show a warning.
+        console.warn("Row/response count mismatch. Uploads will map by index.");
+      }
+
+      // 2) Upload receipts for rows that have a file
+      let uploadedCount = 0;
+      for (let i = 0; i < created.length; i++) {
+        const claim = created[i];
+        const file = rows[i]._file;
+        if (file) {
+          await uploadReceipt(claim.id, file);
+          uploadedCount++;
+        }
+      }
+
+      toast.success(
+        uploadedCount > 0
+          ? `Created ${created.length} claim(s) and uploaded ${uploadedCount} receipt(s)`
+          : `Created ${created.length} claim(s)`
+      );
       setRows([blankRow()]);
-      toast.success("Claim created successfully");
       navigate("/pending");
     } catch (e) {
+      console.error(e);
       setErr(e.message || "Submit failed");
+      toast.error(e.message || "Submit failed");
     } finally {
       setBusy(false);
     }
   }
 
+  // Local file validation (optional, keep in sync with backend allowlist)
+  const ACCEPT =
+    ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx";
+
   return (
-    <div>
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-semibold text-blue-950">Create Claim</h1>
@@ -158,15 +192,16 @@ export default function CreateClaim() {
                 </label>
 
                 <label className="block text-sm sm:col-span-6">
-                  <span className="text-gray-700">Receipt (S3)</span>
+                  <span className="text-gray-700">Receipt (will upload after save)</span>
                   <input
                     type="file"
-                    onChange={(e) => attachFile(idx, e.target.files?.[0] || null)}
+                    accept={ACCEPT}
+                    onChange={(e) => update(idx, "_file", e.target.files?.[0] || null)}
                     className="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-blue-900 hover:file:bg-blue-100"
                   />
-                  {r.receiptUrl && (
+                  {r._file && (
                     <div className="mt-1 text-xs text-green-700">
-                      Attached: <code>{r.receiptUrl}</code>
+                      Attached: <code>{r._file.name}</code> ({Math.round(r._file.size / 1024)} KB)
                     </div>
                   )}
                 </label>
@@ -212,7 +247,6 @@ export default function CreateClaim() {
           </button>
         </div>
       </div>
-    </div>
     </div>
   );
 }
