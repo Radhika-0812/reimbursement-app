@@ -100,12 +100,9 @@ function displayUserEmail(c) {
     c.userEmail, c.user_email, c.email, c.user?.email, extractEmailDeep(c)
   );
 }
+
 function displayDesignation(c) {
-  // Prefer claim-level designation; fall back to nested user if present
-  return firstNonEmpty(
-    c.designation, c.userDesignation, c.user_designation,
-    c.user?.designation
-  );
+  return firstNonEmpty(c.designation, c.userDesignation, c.user_designation, c.user?.designation);
 }
 
 // ---- UI bits ----
@@ -540,7 +537,9 @@ export default function AdminDashboard() {
                 <th className="px-4 py-2">Email</th>
                 <th className="px-4 py-2">Designation</th>
                 <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Amount (cents)</th>
+                <th className="px-4 py-2">Amount</th>
+                <th className="px-4 py-2">Status</th>
+
                 {statusTab === "REJECTED" && (
                   <th className="px-4 py-2">Admin comment</th>
                 )}
@@ -559,6 +558,7 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
                   <td className="px-4 py-2">{c.title}</td>
                   <td className="px-4 py-2">{formatCents(centsFromClaim(c))}</td>
+                  <td className="px-4 py-2">{c.status}</td>
 
                   {statusTab === "REJECTED" && (
                     <td

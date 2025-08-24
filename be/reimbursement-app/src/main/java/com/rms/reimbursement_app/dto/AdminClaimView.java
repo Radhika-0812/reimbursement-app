@@ -2,6 +2,7 @@
 package com.rms.reimbursement_app.dto;
 
 import com.rms.reimbursement_app.domain.Claim;
+import com.rms.reimbursement_app.domain.ClaimStatus;
 import com.rms.reimbursement_app.domain.ClaimType;
 import lombok.Value;
 
@@ -20,6 +21,7 @@ public class AdminClaimView {
     String adminComment;
     String receiptUrl;
     String designation;
+    ClaimStatus status;
 
     Instant createdAt;   // assuming Claim has createdAt
 
@@ -33,9 +35,10 @@ public class AdminClaimView {
                 c.getAmountCents(),
                 c.getClaimType(),
                 c.getDescription(),
-                c.getReceiptUrl(),
                 c.getAdminComment(),
+                c.getReceiptUrl(),
                 c.getDesignation(),
+                c.getStatus(),
                 c.getCreatedAt()
         );
     }

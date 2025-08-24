@@ -40,7 +40,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl shadow p-6">
         <h1 className="text-xl font-semibold text-blue-950">Sign in</h1>
         <p className="text-sm text-gray-500 mt-1">Use your email and password.</p>

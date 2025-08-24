@@ -1,7 +1,27 @@
 // src/pages/Profile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../state/AuthContext";
-import { myProfile } from "../services/user"; // make sure this returns your profile JSON
+import { myProfile } from "../services/user"; // should return your profile JSON
+
+// ---------- helpers (place above the component) ----------
+function nonEmptyOnly(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function firstNonEmpty(...vals) {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    return v;
+  }
+  return "";
+}
 
 export default function Profile() {
   const { user, token } = useAuth();
@@ -35,63 +55,64 @@ export default function Profile() {
     };
   }, [token]);
 
-  // Merge API result over session user (API wins)
-  const profile = useMemo(() => ({ ...(user || {}), ...(apiData || {}) }), [user, apiData]);
+  // Merge session user with API (API values only override if non-empty)
+  const profile = useMemo(
+    () => ({ ...(user || {}), ...nonEmptyOnly(apiData) }),
+    [user, apiData]
+  );
 
-  // ---- Normalize & pick required fields ----
-  const name =
-    profile.name ??
-    profile.fullName ??
-    profile.username ??
-    profile.userName ??
-    "";
+  // ---- Normalize & pick required fields (prefer API->user fallbacks) ----
+  const name = firstNonEmpty(
+    apiData?.name, user?.name,
+    profile.fullName, profile.username, profile.userName
+  );
 
-  const department = profile.department ?? profile.dept ?? profile.team ?? "";
+  const department = firstNonEmpty(
+    apiData?.department, user?.department,
+    profile.dept, profile.team
+  );
 
-  const contactNo =
-    profile.contactNo ??
-    profile.phone ??
-    profile.mobile ??
-    profile.phoneNumber ??
-    profile.contact ??
-    "";
+  const contactNo = firstNonEmpty(
+    apiData?.contactNo, user?.contactNo,
+    apiData?.phone, user?.phone,
+    apiData?.mobile, user?.mobile,
+    apiData?.phoneNumber, user?.phoneNumber,
+    apiData?.contact, user?.contact
+  );
 
   // address can be a string or an object with parts
   const address = useMemo(() => {
-    const a = profile.address;
-    if (typeof a === "string") return a;
-    const parts = a && typeof a === "object"
-      ? [
-          a.line1 ?? a.addressLine1,
-          a.line2 ?? a.addressLine2,
-          a.city,
-          a.state ?? a.region,
-          a.country,
-        ]
-      : [
-          profile.addressLine1,
-          profile.addressLine2,
-          profile.city,
-          profile.state ?? profile.region,
-          profile.country,
-        ];
+    // Prefer API address if meaningful, otherwise user address
+    const candidate = firstNonEmpty(apiData?.address, user?.address, profile.address);
+    if (typeof candidate === "string") return candidate;
+
+    const a = candidate && typeof candidate === "object" ? candidate : {};
+    const parts = [
+      a.line1 ?? a.addressLine1 ?? profile.addressLine1,
+      a.line2 ?? a.addressLine2 ?? profile.addressLine2,
+      a.city ?? profile.city,
+      a.state ?? a.region ?? profile.state ?? profile.region,
+      a.country ?? profile.country,
+    ];
     return parts.filter(Boolean).join(", ");
-  }, [profile]);
+  }, [apiData, user, profile]);
 
-  const pincode =
-    profile.pincode ??
-    profile.pinCode ??
-    profile.postalCode ??
-    profile.postcode ??
-    profile.zip ??
-    profile.zipcode ??
-    "";
+  const pincode = firstNonEmpty(
+    apiData?.pincode, user?.pincode,
+    apiData?.pinCode, user?.pinCode,
+    apiData?.postalCode, user?.postalCode,
+    apiData?.postcode, user?.postcode,
+    apiData?.zip, user?.zip,
+    apiData?.zipcode, user?.zipcode
+  );
 
-      
+  const designation = firstNonEmpty(
+    apiData?.designation, user?.designation, profile.designation, profile.title
+  );
 
-  const designation = profile.designation ?? profile.title ?? "";
-
-  const email = profile.email ?? profile.userEmail ?? "";
+  const email = firstNonEmpty(
+    apiData?.email, user?.email, profile.userEmail
+  );
 
   // small field renderer (always shows the row, even if blank)
   const Row = ({ label, value }) => (

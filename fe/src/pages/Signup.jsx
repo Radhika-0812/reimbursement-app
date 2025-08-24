@@ -51,10 +51,10 @@ export default function Signup() {
 
   return (
    
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-4">
       <div className="w-full max-w-2xl bg-white border rounded-2xl shadow p-6">
-        <h1 className="text-xl font-semibold text-blue-950">Create account</h1>
-        <p className="text-sm text-gray-500 mt-1">Fill in your details to create an account.</p>
+        <h1 className="text-xl font-semibold text-blue-950">Create User</h1>
+        <p className="text-sm text-gray-500 mt-1">Fill in your details to create an user.</p>
 
         <form onSubmit={onSubmit} className="mt-5 space-y-4">
           <Input label="Full Name" name="name" value={form.name} onChange={onChange} required />
