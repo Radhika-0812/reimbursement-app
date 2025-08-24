@@ -82,7 +82,7 @@ function LocalPagination({ page, pageSize, total, onPage }) {
   const baseBtn =
     "px-3 py-1.5 rounded border text-sm transition-colors select-none";
   const primaryBtn =
-    "bg-blue-950 text-white border-white hover:bg-blue-900";
+    " text-white border-white ";
   const disabledBtn = "opacity-50 cursor-not-allowed";
 
   // Make a compact window of numbers (with first/last and ellipses)
@@ -274,7 +274,7 @@ export default function ClosedClaims() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
+    <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">Closed Claims</h1>
 
       {loading && <p>Loading…</p>}
@@ -332,7 +332,7 @@ export default function ClosedClaims() {
                     {/* Admin comment (for REJECTED) */}
                     {c.status === "REJECTED" && (
                       <div className="sm:col-span-2">
-                        <div className="text-gray-600">Admin comment</div>
+                        <div className="text-gray-600">Reject Reason</div>
                         <div className="font-medium text-red-700 break-words">{c.adminComment || "—"}</div>
                       </div>
                     )}

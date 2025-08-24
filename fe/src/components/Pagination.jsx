@@ -25,7 +25,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <button
         onClick={() => canPrev && onPage(page - 1)}
         disabled={!canPrev}
-        className="px-3 py-1.5 rounded-md border  bg-blue-950 text-white border-white-950"  
+        className="px-3 py-1.5 rounded-md border  text-white border-white-950"  
       >
         Prev
       </button>
@@ -33,13 +33,13 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <div className="flex items-center gap-1">
         {pages.map((p, idx) =>
           p.disabled ? (
-            <span key={idx} className="px-2 text-gray-500">…</span>
+            <span key={idx} className="px-2 text-white-500">…</span>
           ) : (
             <button
               key={idx}
               onClick={() => onPage(p.v)}
               className={`px-3 py-1.5 rounded-md border ${
-                p.v === page ? "bg-blue-950 text-white border-white-950" : "hover:bg-gray-50"
+                p.v === page ? " text-white border-white-950" : "hover:bg-gray-50"
               }`}
             >
               {p.label}
@@ -51,7 +51,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <button
         onClick={() => canNext && onPage(page + 1)}
         disabled={!canNext}
-        className="px-3 py-1.5 rounded-md border  bg-blue-950 text-white border-white-950"
+        className="px-3 py-1.5 rounded-md border   text-white border-white-950"
       >
         Next
       </button>
