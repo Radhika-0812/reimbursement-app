@@ -45,6 +45,7 @@ public class AuthService {
         u.setRole(role);
 
         u.setDepartment(req.department().trim());
+        u.setDesignation(req.designation().trim());
         u.setAddress(req.address().trim());
         u.setContact(req.contact().trim());   // validated by DTO
         u.setPincode(req.pincode().trim());   // validated by DTO

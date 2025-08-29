@@ -1,1 +1,41 @@
 @import "tailwindcss";
+
+/* src/index.css (or globals.css) */
+:root{
+  --night:#06141B;
+  --gun:#11212D;
+  --char:#253745;
+  --slate:#445C6A;
+  --steel:#9BA8AB;
+  --cloud:#CCD0CF;
+
+  /* compat names */
+  --coffee:var(--night);
+  --cocoa:var(--char);
+  --taupe:var(--slate);
+  --linen:var(--steel);
+  --eggshell:var(--cloud);
+}
+
+/* sensible defaults */
+body{
+  background: var(--cloud);
+  color: var(--night);
+}
+.card{
+  background:#E6EAEB;             /* cloud+ tint */
+  border:1px solid var(--steel);
+  border-radius:1.25rem;
+}
+.btn-primary{
+  background: var(--char);
+  color: var(--cloud);
+}
+.btn-primary:hover{ filter:brightness(1.05); }
+.btn-ghost{
+  background: transparent;
+  color: var(--cloud);
+  border:1px solid color-mix(in oklab, var(--cloud), transparent 70%);
+}
+
+  

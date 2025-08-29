@@ -5,7 +5,17 @@ import Pagination from "../components/Pagination";
 import { on } from "../lib/eventBus";
 import { toast } from "../lib/toast";
 import { useAuth } from "../state/AuthContext";
-import { centsFromClaim, formatCents } from "../lib/money"; // show cents (paise), not rupees
+import { centsFromClaim, formatCents } from "../lib/money";
+
+import { C_NIGHT, C_CHAR, C_CLOUD, C_GUN, C_SLATE, C_STEEL } from "../theme/palette";
+
+/** ─────────────────────────  PALETTE MAP  ───────────────────────── **/
+export const C_OFFEE    = C_NIGHT;  // strongest text
+export const C_COCOA    = C_GUN;    // primary buttons
+export const C_TAUPE    = C_CHAR;   // secondary accents
+export const C_LINEN    = C_SLATE;  // borders / subtle text
+export const C_EGGSHELL = C_STEEL;  // app surface
+export const C_CARD     = C_CLOUD;  // cards
 
 // ---------- Config ----------
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -25,11 +35,9 @@ function getStoredToken() {
   }
   return null;
 }
-
 function extractFilename(contentDisposition, fallback) {
   if (!contentDisposition) return fallback;
   try {
-    // filename*=UTF-8''my%20file.pdf OR filename="my file.pdf"
     const mStar = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(contentDisposition);
     if (mStar) return decodeURIComponent(mStar[1]);
     const m = /filename\s*=\s*\"?([^\";]+)\"?/i.exec(contentDisposition);
@@ -42,33 +50,19 @@ function extFromFilename(name = "") {
   if (i === -1) return "";
   return name.substring(i + 1).toLowerCase();
 }
-function isPdfCT(ct = "") {
-  return ct.includes("application/pdf");
-}
-function isImgCT(ct = "") {
-  return ct.startsWith("image/");
-}
-// Tiny magic-number sniffing as a last resort
+const isPdfCT = (ct = "") => ct.includes("application/pdf");
+const isImgCT = (ct = "") => ct.startsWith("image/");
 async function sniffMime(blob) {
   const buf = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
-  // PDF: %PDF-
   if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46 && buf[4] === 0x2d) return "application/pdf";
-  // JPG: FF D8
   if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 && buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
-  // GIF: GIF87a / GIF89a
   if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38 && (buf[4] === 0x37 || buf[4] === 0x39) && buf[5] === 0x61) return "image/gif";
-  // BMP: BM
   if (buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
-  // WEBP: RIFF....WEBP
   if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "image/webp";
   return "";
 }
-
-function displayAmountCents(claim) {
-  return formatCents(centsFromClaim(claim));
-}
+const displayAmountCents = (claim) => formatCents(centsFromClaim(claim));
 
 export default function PendingClaims() {
   const { pending = [], loading, refresh } = useClaims();
@@ -76,28 +70,12 @@ export default function PendingClaims() {
 
   const [page, setPage] = useState(1);
   const [openingId, setOpeningId] = useState(null);
-  const [hasReceiptMap, setHasReceiptMap] = useState({}); // { [claimId]: true|false }
+  const [hasReceiptMap, setHasReceiptMap] = useState({});
+  const [viewer, setViewer] = useState({ open: false, url: null, type: null, filename: null, claimId: null });
 
-  // In‑app viewer state (same UX as AdminDashboard/ClosedClaims)
-  const [viewer, setViewer] = useState({
-    open: false,
-    url: null,
-    type: null,
-    filename: null,
-    claimId: null,
-  });
-
+  useEffect(() => { refresh?.().catch(() => {}); }, []); // initial
   useEffect(() => {
-    refresh?.().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Refresh when something changes elsewhere
-  useEffect(() => {
-    const off = on("claims:changed", () => {
-      toast("Claims updated", { type: "info" });
-      refresh?.();
-    });
+    const off = on("claims:changed", () => { toast("Claims updated", { type: "info" }); refresh?.(); });
     return off;
   }, [refresh]);
 
@@ -115,16 +93,13 @@ export default function PendingClaims() {
 
   async function authHeaders() {
     if (auth?.getAccessToken) {
-      try {
-        const t = await auth.getAccessToken();
-        if (t) return { Authorization: `Bearer ${t}` };
-      } catch {}
+      try { const t = await auth.getAccessToken(); if (t) return { Authorization: `Bearer ${t}` }; } catch {}
     }
     const token = getStoredToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // If API didn't include hasReceipt metadata, probe with HEAD /receipt for visible rows
+  // Probe for receipts when metadata isn't present
   useEffect(() => {
     (async () => {
       const headers = await authHeaders();
@@ -138,17 +113,13 @@ export default function PendingClaims() {
             !!c.receiptFilename;
           return !hasMeta && hasReceiptMap[id] === undefined;
         });
-
       if (idsToCheck.length === 0) return;
-
       for (const id of idsToCheck) {
         try {
           const res = await fetch(`${API_BASE_URL}/api/claims/${id}/receipt`, {
-            method: "HEAD",
-            headers,
-            credentials: "include",
+            method: "HEAD", headers, credentials: "include",
           });
-          setHasReceiptMap((m) => ({ ...m, [id]: res.ok })); // 200/2xx => true, 404 => false
+          setHasReceiptMap((m) => ({ ...m, [id]: res.ok }));
         } catch {
           setHasReceiptMap((m) => ({ ...m, [id]: false }));
         }
@@ -168,11 +139,8 @@ export default function PendingClaims() {
   function downloadBlob(blob, filename = "file") {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
@@ -181,38 +149,23 @@ export default function PendingClaims() {
     try {
       const headers = await authHeaders();
       const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/receipt`, {
-        method: "GET",
-        headers,
-        credentials: "include",
+        method: "GET", headers, credentials: "include",
       });
+      if (res.status === 404) { setHasReceiptMap((m) => ({ ...m, [claimId]: false })); toast("No receipt uploaded for this claim", { type: "warning" }); return; }
+      if (!res.ok) { const text = await res.text().catch(() => ""); throw new Error(text || "Failed to fetch receipt"); }
 
-      if (res.status === 404) {
-        setHasReceiptMap((m) => ({ ...m, [claimId]: false }));
-        toast("No receipt uploaded for this claim", { type: "warning" });
-        return;
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || "Failed to fetch receipt");
-      }
-
-      // If the server replied with HTML (e.g., login page), treat as error
       let ct = (res.headers.get("content-type") || "").toLowerCase();
-      if (ct.startsWith("text/html")) {
-        toast("Receipt endpoint returned HTML (auth/proxy/base URL issue)", { type: "error" });
-        return;
-      }
+      if (ct.startsWith("text/html")) { toast("Receipt endpoint returned HTML (auth/proxy/base URL issue)", { type: "error" }); return; }
 
       const blob = await res.blob();
       const cd = res.headers.get("content-disposition") || "";
       const fallbackName = `receipt-${claimId}`;
       let filename = extractFilename(cd, fallbackName);
 
-      // Normalize content-type using filename and sniffing if needed
       const ext = extFromFilename(filename);
       if (!ct || ct === "application/octet-stream") {
         if (ext === "pdf") ct = "application/pdf";
-        if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext))
+        if (["png","jpg","jpeg","gif","webp","bmp","svg"].includes(ext))
           ct = ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
       }
       if (!ct || ct === "application/octet-stream") {
@@ -220,28 +173,21 @@ export default function PendingClaims() {
         if (sniffed) ct = sniffed;
       }
 
-      // Preview only for PDF/images; otherwise download immediately
       const canPreview = isPdfCT(ct) || isImgCT(ct);
-      if (!canPreview) {
-        downloadBlob(blob, filename);
-        return;
-      }
+      if (!canPreview) { downloadBlob(blob, filename); return; }
 
       const url = URL.createObjectURL(blob);
       setViewer({ open: true, url, type: ct, filename, claimId });
     } catch (e) {
       console.error(e);
       toast(e.message || "Could not open receipt", { type: "error" });
-    } finally {
-      setOpeningId(null);
-    }
+    } finally { setOpeningId(null); }
   }
 
   function closeViewer() {
     if (viewer.url) URL.revokeObjectURL(viewer.url);
     setViewer({ open: false, url: null, type: null, filename: null, claimId: null });
   }
-
   function downloadFromViewer() {
     if (!viewer.url) return;
     fetch(viewer.url)
@@ -251,38 +197,62 @@ export default function PendingClaims() {
   }
 
   return (
-    <div>
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">Pending Claims</h1>
+    <div className="space-y-6" style={{ color: C_OFFEE }}>
+      <h1 className="text-xl sm:text-2xl font-semibold">Pending Claims</h1>
 
-        {loading && <p>Loading…</p>}
+      {loading && <p style={{ color: `${C_OFFEE}99` }}>Loading…</p>}
 
-        {!loading && total === 0 && <p className="text-gray-500">No pending claims.</p>}
+      {!loading && (pending?.length || 0) === 0 && (
+        <p style={{ color: `${C_OFFEE}99` }}>No pending claims.</p>
+      )}
 
-        {!loading && total > 0 && (
-          <>
+      {!loading && (pending?.length || 0) > 0 && (
+        <>
+          {/* Card container for the list */}
+          <div
+            className="rounded-[1.25rem] border p-4 sm:p-5"
+            style={{ background: C_GUN, borderColor: C_LINEN }}
+          >
             <div className="space-y-3">
               {pageItems.map((c) => {
                 const id = c.id ?? c.claimId;
                 const canView = hasReceiptFor(c);
                 return (
-                  <div key={id} className="flex items-center justify-between border p-4 rounded-lg bg-white">
+                  <div
+                    key={id}
+                    className="flex items-center justify-between rounded-xl border p-4"
+                    style={{ borderColor: C_LINEN, background:C_CARD }}
+                  >
                     <div>
-                      <div className="font-medium capitalize">{c.title ?? c.category}</div>
-                      <div className="text-sm text-gray-600">Status: Pending</div>
+                      <div className="font-medium capitalize" style={{ color: C_OFFEE }}>
+                        {c.title ?? c.category}
+                      </div>
+                      <div className="text-sm" style={{ color: `${C_OFFEE}99` }}>
+                        Status: Pending
+                      </div>
                       {c.createdAt && (
-                        <div className="text-sm text-gray-500">Created: {new Date(c.createdAt).toLocaleString()}</div>
+                        <div className="text-sm" style={{ color: `${C_OFFEE}80` }}>
+                          Created: {new Date(c.createdAt).toLocaleString()}
+                        </div>
                       )}
-                      <div className="text-sm text-gray-700">Amount: {displayAmountCents(c)}</div>
+                      <div className="text-sm" style={{ color: C_OFFEE }}>
+                        Amount: {displayAmountCents(c)}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       {canView && (
                         <button
                           onClick={() => viewReceipt(id)}
-                          className="text-sm px-3 py-1.5 rounded-md border border-blue-200 text-blue-900 hover:bg-blue-50 disabled:opacity-60"
                           disabled={openingId === id}
                           title="View receipt"
+                          className="text-sm px-3 py-1.5 rounded-md border"
+                          style={{
+                            borderColor: C_LINEN,
+                            color: C_COCOA,
+                            background: C_EGGSHELL,
+                            opacity: openingId === id ? 0.7 : 1,
+                          }}
                         >
                           {openingId === id ? "Opening…" : "View receipt"}
                         </button>
@@ -293,36 +263,65 @@ export default function PendingClaims() {
               })}
             </div>
 
-            <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
-          </>
-        )}
-      </div>
+            {/* Pagination sits inside the card for tighter visual grouping */}
+            <div className="mt-4">
+              <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
+            </div>
+          </div>
+        </>
+      )}
 
-      {/* AdminDashboard-style viewer */}
+      {/* Viewer modal */}
       {viewer.open && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-5xl rounded-xl shadow-xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div
+            className="w-full max-w-5xl rounded-xl border shadow-xl overflow-hidden flex flex-col"
+            style={{ background: C_CARD, borderColor: C_LINEN }}
+          >
+            <div
+              className="flex items-center justify-between px-4 py-3 border-b"
+              style={{ borderColor: C_LINEN, color: "white", background: C_GUN }}
+            >
               <div className="min-w-0">
-                <div className="text-sm text-gray-500 truncate">Claim #{viewer.claimId}</div>
+                <div className="text-xs opacity-70 truncate">Claim #{viewer.claimId}</div>
                 <div className="font-medium truncate">{viewer.filename || "receipt"}</div>
               </div>
               <div className="flex gap-2">
-                <button onClick={downloadFromViewer} className="text-sm px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-50">Download</button>
-                <button onClick={closeViewer} className="text-sm px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-50">Close</button>
+                <button
+                  onClick={downloadFromViewer}
+                  className="text-sm px-3 py-1.5 rounded-md"
+                  style={{ background: C_COCOA, color: C_EGGSHELL }}
+                >
+                  Download
+                </button>
+                <button
+                  onClick={closeViewer}
+                  className="text-sm px-3 py-1.5 rounded-md border"
+                  style={{ borderColor: C_LINEN, color: C_OFFEE, background: C_EGGSHELL }}
+                >
+                  Close
+                </button>
               </div>
             </div>
 
             <div className="p-0 h-[70vh]">
               {isImgCT(viewer.type) ? (
-                <div className="w-full h-full overflow-auto flex items-center justify-center bg-gray-50">
+                <div
+                  className="w-full h-full overflow-auto flex items-center justify-center"
+                  style={{ background: C_GUN }}
+                >
                   <img src={viewer.url} alt="Receipt" className="max-w-full max-h-full" />
                 </div>
               ) : isPdfCT(viewer.type) ? (
                 <iframe src={viewer.url} title="Receipt PDF" className="w-full h-full border-0" />
               ) : (
-                <div className="p-6 text-sm text-gray-600">
-                  Preview not available for <span className="font-mono">{viewer.type || "unknown"}</span>. Click <button onClick={downloadFromViewer} className="underline">Download</button> to save the file.
+                <div className="p-6 text-sm" style={{ color: `${C_OFFEE}99` }}>
+                  Preview not available for{" "}
+                  <span className="font-mono">{viewer.type || "unknown"}</span>. Click{" "}
+                  <button onClick={downloadFromViewer} className="underline" style={{ color: C_COCOA }}>
+                    Download
+                  </button>{" "}
+                  to save the file.
                 </div>
               )}
             </div>

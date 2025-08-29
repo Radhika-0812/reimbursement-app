@@ -2,27 +2,28 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useClaims } from "../state/ClaimsContext";
-import { useAuth } from "../state/AuthContext";       // <-- to get JWT
+import { useAuth } from "../state/AuthContext";
 import toast from "react-hot-toast";
 
-// Keep in sync with backend enum com.rms.reimbursement_app.domain.ClaimType
-const CLAIM_TYPES = [
-  "PETROL_ALLOWANCE",
-  "CAB_ALLOWANCE",
-  "MEAL",
-  "OFFICE_SUPPLY",
-  "POSTAGE",
-];
+// Palette
+import { C_NIGHT, C_CHAR, C_CLOUD, C_GUN, C_SLATE, C_STEEL } from "../theme/palette";
+const C_OFFEE = C_NIGHT;   // darkest text
+const C_COCOA = C_GUN;     // primary button
+const C_TAUPE = C_CHAR;    // secondary accents
+const C_LINEN = C_SLATE;   // borders
+const C_EGGSHELL = C_STEEL;// input bg
+const C_CARD = C_CLOUD;    // card bg
 
-function blankRow() {
-  return {
-    title: "",
-    amountCents: "",          // UI shows ₹; we convert to cents on submit
-    claimType: CLAIM_TYPES[0],
-    description: "",
-    _file: null,              // local only; uploaded after the claim is created
-  };
-}
+// Keep in sync with backend enum
+const CLAIM_TYPES = ["PETROL_ALLOWANCE","CAB_ALLOWANCE","MEAL","OFFICE_SUPPLY","POSTAGE"];
+
+const blankRow = () => ({
+  title: "",
+  amountCents: "",
+  claimType: CLAIM_TYPES[0],
+  description: "",
+  _file: null,
+});
 
 export default function CreateClaim() {
   const navigate = useNavigate();
@@ -41,7 +42,6 @@ export default function CreateClaim() {
   const addRow = () => setRows((r) => [...r, blankRow()]);
   const removeRow = (idx) => setRows((r) => r.filter((_, i) => i !== idx));
 
-  // Try to get Authorization header from AuthContext; fallback to localStorage if needed
   async function authHeaders() {
     let token = null;
     if (auth?.getAccessToken) token = await auth.getAccessToken();
@@ -50,57 +50,37 @@ export default function CreateClaim() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Upload one file to /api/claims/{id}/receipt (multipart/form-data)
   async function uploadReceipt(claimId, file) {
     const fd = new FormData();
     fd.append("file", file);
-    const headers = await authHeaders(); // Authorization only; don't set Content-Type manually
+    const headers = await authHeaders();
     const res = await fetch(`${API_BASE}/api/claims/${claimId}/receipt`, {
       method: "POST",
       headers,
       body: fd,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(text || `Upload failed for claim ${claimId}`);
-    }
-    return res.json(); // { claimId, filename, contentType, size }
+    if (!res.ok) throw new Error((await res.text().catch(() => "")) || `Upload failed for claim ${claimId}`);
+    return res.json();
   }
 
   async function submit() {
-    setErr("");
-    setBusy(true);
+    setErr(""); setBusy(true);
     try {
-      // Build payload for createBatch (convert ₹ to cents)
       const payload = rows.map((r) => ({
         title: String(r.title || ""),
-        amountCents: Math.round(Number(r.amountCents || 0)  ), // ₹ -> cents
+        amountCents: Math.round(Number(r.amountCents || 0)),
         claimType: String(r.claimType),
         description: r.description ? String(r.description) : undefined,
-        // receiptUrl removed; we now upload file AFTER create
       }));
       if (!payload.length) throw new Error("Add at least one claim row");
 
-      // 1) Create the claims
-      const created = await createBatch(payload); // expects array of ClaimResponse { id, ... }
-      if (!Array.isArray(created)) {
-        throw new Error("Create API did not return an array");
-      }
-      if (created.length !== rows.length) {
-        // We assume the backend returns one created claim per row in the same order.
-        // If not, you can map by title or show a warning.
-        console.warn("Row/response count mismatch. Uploads will map by index.");
-      }
+      const created = await createBatch(payload);
+      if (!Array.isArray(created)) throw new Error("Create API did not return an array");
 
-      // 2) Upload receipts for rows that have a file
       let uploadedCount = 0;
       for (let i = 0; i < created.length; i++) {
-        const claim = created[i];
-        const file = rows[i]._file;
-        if (file) {
-          await uploadReceipt(claim.id, file);
-          uploadedCount++;
-        }
+        const f = rows[i]._file;
+        if (f) { await uploadReceipt(created[i].id, f); uploadedCount++; }
       }
 
       toast.success(
@@ -111,41 +91,56 @@ export default function CreateClaim() {
       setRows([blankRow()]);
       navigate("/pending");
     } catch (e) {
-      console.error(e);
       setErr(e.message || "Submit failed");
       toast.error(e.message || "Submit failed");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
-  // Local file validation (optional, keep in sync with backend allowlist)
-  const ACCEPT =
-    ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx";
+  const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx";
+
+  // Reusable field styles (keeps everything on-palette)
+  const fieldStyle = {
+    background: C_CLOUD,
+    borderColor: C_LINEN,
+    color: C_OFFEE,
+  };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="space-y-6" style={{ color: C_OFFEE }}>
+      {/* Header row */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-semibold text-blue-950">Create Claim</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold" style={{ color: C_OFFEE }}>
+          Create Claim
+        </h1>
         <button
           onClick={() => navigate(-1)}
-          className="text-sm px-3 py-1.5 rounded-md border text-blue-950 border-blue-200 hover:bg-blue-50"
+          className="text-sm px-3 py-1.5 rounded-xl border"
+          style={{ ...fieldStyle }}
         >
           ← Back
         </button>
       </div>
 
-      <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
-        {err && <div className="mb-4 text-sm text-red-600">{err}</div>}
+      {/* Card container */}
+      <div
+        className="rounded-[1.25rem] border p-4 sm:p-6"
+        style={{ background: C_GUN, borderColor: C_LINEN }}
+      >
+        {err && <div className="mb-4 text-sm" style={{ color: "#b91c1c" }}>{err}</div>}
 
         <div className="space-y-4">
           {rows.map((r, idx) => (
-            <div key={idx} className="border border-gray-200 rounded-lg p-4">
+            <div
+              key={idx}
+              className="rounded-xl border p-4"
+              style={{ borderColor: C_LINEN, background: C_CARD }} // ← removed peach
+            >
               <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-gray-700">Title</span>
+                  <span style={{ color: `${C_OFFEE}B3` }}>Title</span>
                   <input
-                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2"
+                    style={fieldStyle}
                     value={r.title}
                     onChange={(e) => update(idx, "title", e.target.value)}
                     placeholder="Cab to office"
@@ -154,11 +149,12 @@ export default function CreateClaim() {
                 </label>
 
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-gray-700">Amount (₹)</span>
+                  <span style={{ color: `${C_OFFEE}B3` }}>Amount (₹)</span>
                   <input
                     type="number"
                     step="0.01"
-                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2"
+                    style={fieldStyle}
                     value={r.amountCents}
                     onChange={(e) => update(idx, "amountCents", e.target.value)}
                     placeholder="550.00"
@@ -167,24 +163,24 @@ export default function CreateClaim() {
                 </label>
 
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-gray-700">Claim Type</span>
+                  <span style={{ color: `${C_OFFEE}B3` }}>Claim Type</span>
                   <select
-                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2"
+                    style={fieldStyle}
                     value={r.claimType}
                     onChange={(e) => update(idx, "claimType", e.target.value)}
                   >
                     {CLAIM_TYPES.map((ct) => (
-                      <option key={ct} value={ct}>
-                        {ct}
-                      </option>
+                      <option key={ct} value={ct}>{ct}</option>
                     ))}
                   </select>
                 </label>
 
                 <label className="block text-sm sm:col-span-6">
-                  <span className="text-gray-700">Description</span>
+                  <span style={{ color: `${C_OFFEE}B3` }}>Description</span>
                   <input
-                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2"
+                    style={fieldStyle}
                     value={r.description}
                     onChange={(e) => update(idx, "description", e.target.value)}
                     placeholder="Airport drop"
@@ -192,15 +188,31 @@ export default function CreateClaim() {
                 </label>
 
                 <label className="block text-sm sm:col-span-6">
-                  <span className="text-gray-700">Receipt (will upload after save)</span>
+                  <span style={{ color: `${C_OFFEE}B3` }}>
+                    Receipt <span className="opacity-70">(will upload after save)</span>
+                  </span>
                   <input
                     type="file"
                     accept={ACCEPT}
                     onChange={(e) => update(idx, "_file", e.target.files?.[0] || null)}
-                    className="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-blue-900 hover:file:bg-blue-100"
+                    className="mt-1 block w-full text-sm"
+                    style={{ color: C_OFFEE }}
                   />
+                  {/* file button */}
+                  <style>{`
+                    input[type="file"]::file-selector-button{
+                      background:${C_COCOA};
+                      color:${C_EGGSHELL};
+                      border:none;
+                      padding:.5rem .75rem;
+                      border-radius:.5rem;
+                      margin-right:.75rem;
+                      cursor:pointer;
+                    }
+                    input[type="file"]::file-selector-button:hover{ opacity:.9; }
+                  `}</style>
                   {r._file && (
-                    <div className="mt-1 text-xs text-green-700">
+                    <div className="mt-1 text-xs" style={{ color: "#166534" }}>
                       Attached: <code>{r._file.name}</code> ({Math.round(r._file.size / 1024)} KB)
                     </div>
                   )}
@@ -211,7 +223,8 @@ export default function CreateClaim() {
                 <button
                   type="button"
                   onClick={() => removeRow(idx)}
-                  className="rounded-md border px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+                  className="rounded-md border px-3 py-1.5 text-sm"
+                  style={{ borderColor: "#fecaca", color: "#b91c1c", background: "#fff1f2" }}
                 >
                   Remove row
                 </button>
@@ -219,7 +232,8 @@ export default function CreateClaim() {
                   <button
                     type="button"
                     onClick={addRow}
-                    className="rounded-md border px-3 py-1.5 text-sm text-blue-900 hover:bg-blue-50"
+                    className="rounded-md border px-3 py-1.5 text-sm"
+                    style={{ borderColor: C_LINEN, color: C_COCOA, background: C_EGGSHELL }}
                   >
                     + Add row
                   </button>
@@ -234,14 +248,16 @@ export default function CreateClaim() {
             type="button"
             disabled={busy}
             onClick={submit}
-            className="rounded-md bg-blue-950 px-4 py-2 text-white hover:bg-blue-900 disabled:opacity-60"
+            className="rounded-xl px-4 py-2 text-white"
+            style={{ background: C_COCOA, opacity: busy ? 0.7 : 1 }}
           >
             {busy ? "Submitting..." : "Submit"}
           </button>
           <button
             type="button"
             onClick={() => setRows([blankRow()])}
-            className="rounded-md border px-4 py-2 text-gray-700 hover:bg-gray-50"
+            className="rounded-xl border px-4 py-2"
+            style={{ ...fieldStyle }}
           >
             Reset
           </button>

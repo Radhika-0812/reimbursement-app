@@ -6,14 +6,29 @@ import {
   Legend, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from "recharts";
-import { centsFromClaim, formatCents } from "../lib/money"; // 👈 work in cents (paise)
+import { C_NIGHT, C_CHAR, C_CLOUD, C_GUN, C_SLATE, C_STEEL } from "../theme/palette";
+import { centsFromClaim, formatCents } from "../lib/money";
 
-// Small inline tick renderer: split on "_" and stack lines
+/** Palette aliases for readability */
+export const C_OFFEE    = C_NIGHT;   // darkest text / headings
+export const C_COCOA    = C_GUN;     // primary accents (unused here)
+export const C_TAUPE    = C_CHAR;    // secondary accents
+export const C_LINEN    = C_SLATE;   // borders / grid
+export const C_EGGSHELL = C_STEEL;   // subtle text
+// Card surface a touch lighter than Cloud for separation:
+export const C_CARD     = "#E6EAEB";
+
+// Status colors
+const C_RED    = "#FF0000";
+const C_ORANGE = "#FFA500";
+const C_GREEN  = "#008000";
+
+/** Wrapped X tick (split by "_") */
 const WrappedTick = ({ x, y, payload }) => {
   const parts = String(payload?.value ?? "").split("_");
   return (
     <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={16} textAnchor="middle" fontSize={12} fill="#374151">
+      <text x={0} y={0} dy={16} textAnchor="middle" fontSize={12} fill={C_OFFEE}>
         {parts.map((s, i) => (
           <tspan key={i} x={0} dy={i === 0 ? 0 : 12}>{s}</tspan>
         ))}
@@ -24,7 +39,6 @@ const WrappedTick = ({ x, y, payload }) => {
 
 export default function HomePage() {
   const { pending = [], approved = [], rejected = [], refresh } = useClaims();
-
   useEffect(() => { refresh().catch(() => {}); }, [refresh]);
 
   const P = Array.isArray(pending) ? pending : [];
@@ -51,23 +65,23 @@ export default function HomePage() {
     return Array.from(m.values()).sort((a, b) => a.category.localeCompare(b.category));
   }, [P, A, R]);
 
-  // ---- Table (counts + sums in **cents**) ----
-  const getAmt = (it) => centsFromClaim(it);          // 👈 always cents
-  const fmt    = (n)  => formatCents(n);              // 👈 group digits, no currency symbol
+  // ---- Table (counts + sums in cents) ----
+  const getAmt = (it) => centsFromClaim(it);
+  const fmt    = (n)  => formatCents(n);
 
   const tableRows = useMemo(() => {
     const m = new Map();
     const add = (list, key) => {
       for (const it of list) {
         const c = catOf(it);
-        const amt = getAmt(it);                        // cents
+        const amt = getAmt(it);
         const row = m.get(c) || {
           category: c,
           counts: { Pending: 0, Approved: 0, Rejected: 0 },
           sums:   { Pending: 0, Approved: 0, Rejected: 0 },
         };
         row.counts[key] += 1;
-        row.sums[key]   += amt;                        // accumulate cents
+        row.sums[key]   += amt;
         m.set(c, row);
       }
     };
@@ -86,116 +100,103 @@ export default function HomePage() {
     return tableRows.reduce((acc, r) => {
       for (const k of ["Pending", "Approved", "Rejected", "Total"]) {
         acc.counts[k] += r.counts[k];
-        acc.sums[k]   += r.sums[k];                    // cents
+        acc.sums[k]   += r.sums[k];
       }
       return acc;
     }, { counts: { Pending: 0, Approved: 0, Rejected: 0, Total: 0 },
          sums:   { Pending: 0, Approved: 0, Rejected: 0, Total: 0 } });
   }, [tableRows]);
 
-  // KPI for approved sum (in cents)
   const approvedSum = useMemo(() => A.reduce((s, it) => s + getAmt(it), 0), [A]);
-
   const hasData = ALL.length > 0;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <h1 className="text-xl sm:text-2xl font-semibold text-blue-950 mb-4">Dashboard</h1>
+    <div className="space-y-6" style={{ color: C_OFFEE }}>
+      <h1 className="text-2xl font-semibold mb-5" style={{ color: C_OFFEE }}>Dashboard</h1>
 
-      {/* Top KPI cards */}
+      {/* ===== ROW 1: KPI cards ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="border rounded p-4 bg-white">
-          <div className="text-sm text-gray-600">Pending</div>
-          <div className="text-3xl font-bold">{kpi.pending}</div>
+        <div className="rounded-[1.25rem] border p-4" style={{ background: C_CARD, borderColor: C_LINEN }}>
+          <div className="text-sm" style={{ color: `${C_OFFEE}B3` }}>Pending</div>
+          <div className="text-3xl font-bold" style={{ color: C_OFFEE }}>{kpi.pending}</div>
         </div>
-        <div className="border rounded p-4 bg-white">
-          <div className="text-sm text-gray-600">Approved</div>
-          <div className="text-3xl font-bold">{kpi.approved}</div>
+        <div className="rounded-[1.25rem] border p-4" style={{ background: C_CARD, borderColor: C_LINEN }}>
+          <div className="text-sm" style={{ color: `${C_OFFEE}B3` }}>Approved</div>
+          <div className="text-3xl font-bold" style={{ color: C_OFFEE }}>{kpi.approved}</div>
         </div>
-        <div className="border rounded p-4 bg-white">
-          <div className="text-sm text-gray-600">Rejected</div>
-          <div className="text-3xl font-bold">{kpi.rejected}</div>
+        <div className="rounded-[1.25rem] border p-4" style={{ background: C_CARD, borderColor: C_LINEN }}>
+          <div className="text-sm" style={{ color: `${C_OFFEE}B3` }}>Rejected</div>
+          <div className="text-3xl font-bold" style={{ color: C_OFFEE }}>{kpi.rejected}</div>
         </div>
       </div>
 
       {!hasData && (
-        <div className="rounded-xl border bg-white p-6">
-          <div className="text-gray-700 font-medium">No claims yet.</div>
-          <div className="text-sm text-gray-500">Create claims to see charts here.</div>
+        <div className="rounded-[1.25rem] border p-6" style={{ background: C_CARD, borderColor: C_LINEN }}>
+          <div className="font-medium" style={{ color: C_OFFEE }}>No claims yet.</div>
+          <div className="text-sm" style={{ color: `${C_OFFEE}99` }}>Create claims to see charts here.</div>
         </div>
       )}
 
       {hasData && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* LEFT: KPIs */}
-            <div className="space-y-4">
-              {/* Total reimbursements (all claims count) */}
-              <div className="rounded-xl border bg-white p-4">
-                <div className="text-sm text-gray-600 mb-1">Total Reimbursements Request</div>
-                <div className="text-4xl font-extrabold">{ALL.length}</div>
+          {/* ===== ROW 2: KPI sums + Chart ===== */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="space-y-4 lg:col-span-1">
+              <div className="rounded-[1.25rem] border p-4" style={{ background: C_CARD, borderColor: C_LINEN }}>
+                <div className="text-sm mb-1" style={{ color: `${C_OFFEE}B3` }}>Total Reimbursements Request</div>
+                <div className="text-4xl font-extrabold" style={{ color: C_OFFEE }}>{ALL.length}</div>
               </div>
 
-              {/* Amount received (Approved sum) — in cents */}
-              <div className="rounded-xl border border-green-200 bg-green-50 p-6">
-                <div className="text-sm text-green-700 mb-1">Amount received </div>
-                <div className="text-4xl font-extrabold text-green-700">
-                  {fmt(approvedSum)}
-                </div>
+              <div className="rounded-[1.25rem] border p-6" style={{ background: C_CARD, borderColor: C_LINEN }}>
+                <div className="text-sm mb-1" style={{ color: `${C_OFFEE}B3` }}>Amount received</div>
+                <div className="text-4xl font-extrabold" style={{ color: C_GREEN }}>{fmt(approvedSum)}</div>
               </div>
 
-              {/* Pending claims sum — in cents */}
-              <div className="rounded-xl border border-orange-200 bg-orange-50 p-6">
-                <div className="text-sm text-orange-400 mb-1">Pending claims </div>
-                <div className="text-4xl font-extrabold text-orange-400">
+              <div className="rounded-[1.25rem] border p-6" style={{ background: C_CARD, borderColor: C_LINEN }}>
+                <div className="text-sm mb-1" style={{ color: `${C_OFFEE}B3` }}>Pending claims</div>
+                <div className="text-4xl font-extrabold" style={{ color: C_ORANGE }}>
                   {fmt(P.reduce((s, it) => s + getAmt(it), 0))}
                 </div>
               </div>
             </div>
 
-            {/* RIGHT: Bar chart (status counts by category) */}
-            <div className="rounded-xl border bg-white p-4">
-              <div className="text-sm text-gray-600 mb-2">Status by category</div>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%" debounce={0}>
+            <div className="rounded-[1.25rem] border p-4 lg:col-span-2" style={{ background: C_CARD, borderColor: C_LINEN }}>
+              <div className="text-sm mb-2" style={{ color: `${C_OFFEE}B3` }}>Status by category</div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 28 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="category"
-                      tick={WrappedTick}
-                      interval={0}
-                      height={56}
-                      tickMargin={10}
-                      tickLine={false}
-                    />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
-                    <Tooltip contentStyle={{ fontSize: "9px" }} />
-                    <Legend wrapperStyle={{ fontSize: "12px" }} />
-                    <Bar dataKey="Pending"  stackId="a" fill="#f59e0b" isAnimationActive={false} />
-                    <Bar dataKey="Approved" stackId="a" fill="#16a34a" isAnimationActive={false} />
-                    <Bar dataKey="Rejected" stackId="a" fill="#ef4444" isAnimationActive={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={`${C_LINEN}80`} />
+                    <XAxis dataKey="category" tick={WrappedTick} interval={0} height={56} tickMargin={10} tickLine={false} axisLine={{ stroke: C_LINEN }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C_OFFEE }} axisLine={{ stroke: C_LINEN }} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: "12px", borderColor: C_LINEN }} />
+                    <Legend wrapperStyle={{ fontSize: "12px", color: C_OFFEE }} />
+                    <Bar dataKey="Pending"  stackId="a" fill={C_ORANGE} isAnimationActive={false} />
+                    <Bar dataKey="Approved" stackId="a" fill={C_GREEN}  isAnimationActive={false} />
+                    <Bar dataKey="Rejected" stackId="a" fill={C_RED}    isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           </div>
 
-          {/* Table: show "count/sum" (cents) */}
-          <div className="mt-6 rounded-xl border bg-white overflow-x-auto">
-            <div className="px-4 py-3 border-b bg-gray-50 text-sm text-gray-700">Category summary </div>
-            <table className="min-w-full text-sm">
+          {/* ===== ROW 3: Table ===== */}
+          <div className="mt-6 rounded-[1.25rem] border overflow-x-auto" style={{ background: C_CARD, borderColor: C_LINEN }}>
+            <div className="px-4 py-3 border-b text-sm" style={{ background: "#E3E9EC", borderColor: C_LINEN, color: C_OFFEE }}>
+              Category summary
+            </div>
+            <table className="min-w-full text-sm" style={{ color: C_OFFEE }}>
               <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="px-4 py-2">Category</th>
-                  <th className="px-4 py-2">Pending</th>
-                  <th className="px-4 py-2">Approved</th>
-                  <th className="px-4 py-2">Rejected</th>
-                  <th className="px-4 py-2">Total</th>
+                <tr style={{ background: "#E3E9EC", color: C_OFFEE }}>
+                  <th className="px-4 py-2 text-left">Category</th>
+                  <th className="px-4 py-2 text-left">Pending</th>
+                  <th className="px-4 py-2 text-left">Approved</th>
+                  <th className="px-4 py-2 text-left">Rejected</th>
+                  <th className="px-4 py-2 text-left">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((r) => (
-                  <tr key={r.category} className="border-t">
+                  <tr key={r.category} className="border-t" style={{ borderColor: C_LINEN }}>
                     <td className="px-4 py-2 font-medium">{r.category}</td>
                     <td className="px-4 py-2">{r.counts.Pending}/{fmt(r.sums.Pending)}</td>
                     <td className="px-4 py-2">{r.counts.Approved}/{fmt(r.sums.Approved)}</td>
@@ -205,7 +206,7 @@ export default function HomePage() {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t bg-gray-50 font-semibold">
+                <tr className="border-t font-semibold" style={{ borderColor: C_LINEN, background: "#E3E9EC" }}>
                   <td className="px-4 py-2">Total</td>
                   <td className="px-4 py-2">{totals.counts.Pending}/{fmt(totals.sums.Pending)}</td>
                   <td className="px-4 py-2">{totals.counts.Approved}/{fmt(totals.sums.Approved)}</td>
