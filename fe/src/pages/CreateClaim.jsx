@@ -101,7 +101,7 @@ export default function CreateClaim() {
   // Reusable field styles (keeps everything on-palette)
   const fieldStyle = {
     background: C_CLOUD,
-    borderColor: C_LINEN,
+    borderColor: C_NIGHT,
     color: C_OFFEE,
   };
 
@@ -124,7 +124,7 @@ export default function CreateClaim() {
       {/* Card container */}
       <div
         className="rounded-[1.25rem] border p-4 sm:p-6"
-        style={{ background: C_GUN, borderColor: C_LINEN }}
+        style={{ background: C_NIGHT, borderColor: C_LINEN }}
       >
         {err && <div className="mb-4 text-sm" style={{ color: "#b91c1c" }}>{err}</div>}
 
@@ -133,7 +133,7 @@ export default function CreateClaim() {
             <div
               key={idx}
               className="rounded-xl border p-4"
-              style={{ borderColor: C_LINEN, background: C_CARD }} // ← removed peach
+              style={{ borderColor: C_CLOUD, background: C_CLOUD }} // ← removed peach
             >
               <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
                 <label className="block text-sm sm:col-span-2">
@@ -249,7 +249,7 @@ export default function CreateClaim() {
             disabled={busy}
             onClick={submit}
             className="rounded-xl px-4 py-2 text-white"
-            style={{ background: C_COCOA, opacity: busy ? 0.7 : 1 }}
+            style={{ background: C_COCOA,opacity: busy ? 0.7 : 1 }}
           >
             {busy ? "Submitting..." : "Submit"}
           </button>

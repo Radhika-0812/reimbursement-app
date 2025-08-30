@@ -49,95 +49,90 @@ function LoginGate() {
   return <Login />;
 }
 
+// src/App.jsx
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ClaimsProvider>
-          {/* ROW LAYOUT: sidebar | main column */}
           <div
-            className="min-h-screen flex"
-            // Use CSS variable palette (Night / Cloud)
-            style={{ background: "var(--cloud)", color: "var(--night)" }}
+            className="min-h-screen flex flex-col"      // ← make it a column
+            style={{ background: "#F5F0E6", color: "var(--night)" }}
           >
-            <Sidebar />
+            {/* mobile header spacer so content clears the fixed header in Sidebar */}
+            <div className="md:hidden h-12" />
 
-            {/* Main column (fills space next to sidebar) */}
-            <div className="flex-1 min-w-0 flex flex-col">
-              <main className="flex-1 px-6 py-6">
-                <Routes>
-                  {/* Public (guarded so authed users don't see login again) */}
-                  <Route path="/login" element={<LoginGate />} />
+            <div className="flex flex-1">
+              <Sidebar />
 
-                  {/* Signup is ADMIN-ONLY */}
-                  <Route
-                    path="/signup"
-                    element={
-                      <RequireAuth>
-                        <RequireAdmin>
-                          <Signup />
-                        </RequireAdmin>
-                      </RequireAuth>
-                    }
-                  />
+              {/* Main column (fills space next to sidebar) */}
+              <div className="flex-1 min-w-0 flex flex-col">
+                <main className="flex-1 px-6 py-6">
+                  <Routes>
+                    <Route path="/login" element={<LoginGate />} />
 
-                  {/* Protected user routes */}
-                  <Route
-                    path="/create"
-                    element={
-                      <RequireAuth>
-                        <CreateClaim />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/pending"
-                    element={
-                      <RequireAuth>
-                        <PendingClaims />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/closed"
-                    element={
-                      <RequireAuth>
-                        <ClosedClaims />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/profile"
-                    element={
-                      <RequireAuth>
-                        <Profile />
-                      </RequireAuth>
-                    }
-                  />
+                    <Route
+                      path="/signup"
+                      element={
+                        <RequireAuth>
+                          <RequireAdmin>
+                            <Signup />
+                          </RequireAdmin>
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/create"
+                      element={
+                        <RequireAuth>
+                          <CreateClaim />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/pending"
+                      element={
+                        <RequireAuth>
+                          <PendingClaims />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/closed"
+                      element={
+                        <RequireAuth>
+                          <ClosedClaims />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/profile"
+                      element={
+                        <RequireAuth>
+                          <Profile />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/admin"
+                      element={
+                        <RequireAuth>
+                          <RequireAdmin>
+                            <AdminDashboard />
+                          </RequireAdmin>
+                        </RequireAuth>
+                      }
+                    />
+                    <Route path="/" element={<RootGate />} />
+                  </Routes>
+                </main>
 
-                  {/* Admin only */}
-                  <Route
-                    path="/admin"
-                    element={
-                      <RequireAuth>
-                        <RequireAdmin>
-                          <AdminDashboard />
-                        </RequireAdmin>
-                      </RequireAuth>
-                    }
-                  />
-
-                  {/* Home */}
-                  <Route path="/" element={<RootGate />} />
-                </Routes>
-              </main>
-
-              {/* Footer aligns with content column */}
-              <Footer />
+                <Footer />
+              </div>
             </div>
-          </div>
 
-          <Toaster position="top-right" reverseOrder={false} />
+            <Toaster position="top-right" reverseOrder={false} />
+          </div>
         </ClaimsProvider>
       </AuthProvider>
     </BrowserRouter>

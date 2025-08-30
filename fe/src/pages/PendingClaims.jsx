@@ -1,7 +1,6 @@
 // src/pages/PendingClaims.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useClaims } from "../state/ClaimsContext";
-import Pagination from "../components/Pagination";
 import { on } from "../lib/eventBus";
 import { toast } from "../lib/toast";
 import { useAuth } from "../state/AuthContext";
@@ -10,7 +9,7 @@ import { centsFromClaim, formatCents } from "../lib/money";
 import { C_NIGHT, C_CHAR, C_CLOUD, C_GUN, C_SLATE, C_STEEL } from "../theme/palette";
 
 /** ─────────────────────────  PALETTE MAP  ───────────────────────── **/
-export const C_OFFEE    = C_NIGHT;  // strongest text
+export const C_OFFEE    = C_NIGHT;  // headings / strongest text
 export const C_COCOA    = C_GUN;    // primary buttons
 export const C_TAUPE    = C_CHAR;   // secondary accents
 export const C_LINEN    = C_SLATE;  // borders / subtle text
@@ -24,8 +23,6 @@ const AUTH_TOKEN_KEYS = [
   "access_token",
   "token",
 ];
-
-const PAGE_SIZE = 5;
 
 // ---------- Helpers ----------
 function getStoredToken() {
@@ -47,8 +44,7 @@ function extractFilename(contentDisposition, fallback) {
 }
 function extFromFilename(name = "") {
   const i = name.lastIndexOf(".");
-  if (i === -1) return "";
-  return name.substring(i + 1).toLowerCase();
+  return i === -1 ? "" : name.substring(i + 1).toLowerCase();
 }
 const isPdfCT = (ct = "") => ct.includes("application/pdf");
 const isImgCT = (ct = "") => ct.startsWith("image/");
@@ -63,6 +59,71 @@ async function sniffMime(blob) {
   return "";
 }
 const displayAmountCents = (claim) => formatCents(centsFromClaim(claim));
+const formatDate = (ts) => { try { return new Date(ts).toLocaleString(); } catch { return ts || ""; } };
+
+/** Local pagination (same as ClosedClaims) */
+function LocalPagination({ page, pageSize, total, onPage }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
+
+  const windowSize = 5;
+  let start = Math.max(1, page - Math.floor(windowSize / 2));
+  let end = Math.min(pages, start + windowSize - 1);
+  start = Math.max(1, end - windowSize + 1);
+
+  const seq = [];
+  if (start > 1) { seq.push(1); if (start > 2) seq.push("…"); }
+  for (let p = start; p <= end; p++) seq.push(p);
+  if (end < pages) { if (end < pages - 1) seq.push("…"); seq.push(pages); }
+
+  const baseBtn = { borderColor: C_LINEN, color: C_OFFEE, background: C_EGGSHELL };
+
+  return (
+    <div className="flex items-center justify-center gap-2 mt-4">
+      <button
+        onClick={() => onPage(Math.max(1, page - 1))}
+        disabled={page <= 1}
+        className="px-3 py-1.5 rounded-md border text-sm disabled:opacity-60"
+        style={baseBtn}
+      >
+        Prev
+      </button>
+
+      {seq.map((n, i) =>
+        n === "…" ? (
+          <span key={`ellipsis-${i}`} className="px-2" style={{ color: `${C_OFFEE}B3` }}>
+            …
+          </span>
+        ) : (
+          <button
+            key={n}
+            onClick={() => onPage(n)}
+            aria-current={n === page ? "page" : undefined}
+            className="px-3 py-1.5 rounded-md border text-sm"
+            style={
+              n === page
+                ? { background: C_COCOA, color: C_EGGSHELL, borderColor: C_COCOA }
+                : baseBtn
+            }
+          >
+            {n}
+          </button>
+        )
+      )}
+
+      <button
+        onClick={() => onPage(Math.min(pages, page + 1))}
+        disabled={page >= pages}
+        className="px-3 py-1.5 rounded-md border text-sm disabled:opacity-60"
+        style={baseBtn}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 3; // match ClosedClaims
 
 export default function PendingClaims() {
   const { pending = [], loading, refresh } = useClaims();
@@ -99,7 +160,7 @@ export default function PendingClaims() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Probe for receipts when metadata isn't present
+  // Probe receipts (when metadata is missing)
   useEffect(() => {
     (async () => {
       const headers = await authHeaders();
@@ -201,86 +262,92 @@ export default function PendingClaims() {
       <h1 className="text-xl sm:text-2xl font-semibold">Pending Claims</h1>
 
       {loading && <p style={{ color: `${C_OFFEE}99` }}>Loading…</p>}
+      {!loading && total === 0 && <p style={{ color: `${C_OFFEE}99` }}>No pending claims.</p>}
 
-      {!loading && (pending?.length || 0) === 0 && (
-        <p style={{ color: `${C_OFFEE}99` }}>No pending claims.</p>
-      )}
-
-      {!loading && (pending?.length || 0) > 0 && (
+      {!!total && (
         <>
-          {/* Card container for the list */}
-          <div
-            className="rounded-[1.25rem] border p-4 sm:p-5"
-            style={{ background: C_GUN, borderColor: C_LINEN }}
-          >
-            <div className="space-y-3">
-              {pageItems.map((c) => {
-                const id = c.id ?? c.claimId;
-                const canView = hasReceiptFor(c);
-                return (
+          {/* SAME CARD STYLE AS ClosedClaims */}
+          <div className="grid gap-3">
+            {pageItems.map((c) => {
+              const id = c.id ?? c.claimId;
+              const canView = hasReceiptFor(c);
+              const createdTs = c.createdAt || c.updatedAt;
+
+              return (
+                <div
+                  key={id}
+                  className="rounded-xl border overflow-hidden"
+                  style={{ borderColor: C_NIGHT, background: C_CARD }}
+                >
+                  {/* header */}
                   <div
-                    key={id}
-                    className="flex items-center justify-between rounded-xl border p-4"
-                    style={{ borderColor: C_LINEN, background:C_CARD }}
+                    className="flex items-center justify-between px-4 py-3 border-b"
+                    style={{ borderColor: C_NIGHT, background: C_NIGHT, color: "white" }}
                   >
-                    <div>
-                      <div className="font-medium capitalize" style={{ color: C_OFFEE }}>
-                        {c.title ?? c.category}
-                      </div>
-                      <div className="text-sm" style={{ color: `${C_OFFEE}99` }}>
-                        Status: Pending
-                      </div>
-                      {c.createdAt && (
-                        <div className="text-sm" style={{ color: `${C_OFFEE}80` }}>
-                          Created: {new Date(c.createdAt).toLocaleString()}
-                        </div>
-                      )}
-                      <div className="text-sm" style={{ color: C_OFFEE }}>
-                        Amount: {displayAmountCents(c)}
+                    <div className="min-w-0">
+                      <div className="text-xs opacity-70 truncate">Claim #{id}</div>
+                      <div className="font-medium capitalize truncate">
+                        {c.title ?? c.category ?? "—"}
                       </div>
                     </div>
-
                     <div className="flex items-center gap-2">
                       {canView && (
                         <button
                           onClick={() => viewReceipt(id)}
-                          disabled={openingId === id}
-                          title="View receipt"
-                          className="text-sm px-3 py-1.5 rounded-md border"
+                          className="text-sm px-3 py-1.5 rounded-md border disabled:opacity-60"
                           style={{
                             borderColor: C_LINEN,
                             color: C_COCOA,
                             background: C_EGGSHELL,
                             opacity: openingId === id ? 0.7 : 1,
                           }}
+                          disabled={openingId === id}
+                          title="View receipt"
                         >
                           {openingId === id ? "Opening…" : "View receipt"}
                         </button>
                       )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
 
-            {/* Pagination sits inside the card for tighter visual grouping */}
-            <div className="mt-4">
-              <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
-            </div>
+                  {/* body */}
+                  <div className="px-4 py-3 grid sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div style={{ color: `${C_OFFEE}99` }}>Status</div>
+                      <div className="font-medium">PENDING</div>
+                    </div>
+                    <div>
+                      <div style={{ color: `${C_OFFEE}99` }}>Created</div>
+                      <div className="font-medium">{formatDate(createdTs)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: `${C_OFFEE}99` }}>Amount</div>
+                      <div className="font-medium">{displayAmountCents(c)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: `${C_OFFEE}99` }}>Type</div>
+                      <div className="font-medium">{c.claimType || "—"}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+
+          <LocalPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
         </>
       )}
 
-      {/* Viewer modal */}
+      {/* Viewer modal (same styling as ClosedClaims) */}
       {viewer.open && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div
             className="w-full max-w-5xl rounded-xl border shadow-xl overflow-hidden flex flex-col"
-            style={{ background: C_CARD, borderColor: C_LINEN }}
+            style={{ background: C_CARD, borderColor: C_NIGHT }}
           >
             <div
               className="flex items-center justify-between px-4 py-3 border-b"
-              style={{ borderColor: C_LINEN, color: "white", background: C_GUN }}
+              style={{ borderColor: C_LINEN, color: "white", background: C_NIGHT }}
             >
               <div className="min-w-0">
                 <div className="text-xs opacity-70 truncate">Claim #{viewer.claimId}</div>
@@ -308,7 +375,7 @@ export default function PendingClaims() {
               {isImgCT(viewer.type) ? (
                 <div
                   className="w-full h-full overflow-auto flex items-center justify-center"
-                  style={{ background: C_GUN }}
+                  style={{ background: C_EGGSHELL }}
                 >
                   <img src={viewer.url} alt="Receipt" className="max-w-full max-h-full" />
                 </div>

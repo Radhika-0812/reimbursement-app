@@ -2,17 +2,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
-import { C_NIGHT,C_CHAR,C_CLOUD,C_GUN,C_SLATE,C_STEEL } from "../theme/palette";
+import { C_OFFEE, C_COCOA, C_LINEN, C_EGGSHELL } from "../theme/palette";
 
-/** ─────────────────────────  PALETTE  ───────────────────────── **/
+// Feather icons via react-icons
+import {
+  FiHome,
+  FiPlus,
+  FiClock,
+  FiCheckCircle,
+  FiChevronDown,
+  FiMenu,
+  FiX,
+  FiUserPlus,   // NEW
+  FiUpload,     // (optional) if you later add an upload page
+} from "react-icons/fi";
 
-export const C_OFFEE    = C_NIGHT;   // sidebar bg, headings
-export const C_COCOA    = C_GUN;    // primary buttons
-export const C_TAUPE    = C_CHAR;   // secondary accents
-export const C_LINEN    = C_SLATE;   // borders / subtle text
-export const C_EGGSHELL = C_STEEL;   // app bg / light text on dark
-export const C_CARD = C_CLOUD;
-/** Nav item pill */
+/* Desktop nav item */
 const Item = ({ to, icon, children, onClick }) => (
   <NavLink
     to={to}
@@ -27,7 +32,27 @@ const Item = ({ to, icon, children, onClick }) => (
       ].join(" ")
     }
   >
-    {icon ? <span className="opacity-80">{icon}</span> : null}
+    {icon ? <span className="opacity-90 text-xl leading-none">{icon}</span> : null}
+    <span className="font-medium">{children}</span>
+  </NavLink>
+);
+
+/* Drawer nav item (same look, tighter padding) */
+const DrawerItem = ({ to, icon, children, onClick }) => (
+  <NavLink
+    to={to}
+    end
+    onClick={onClick}
+    className={({ isActive }) =>
+      [
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition select-none",
+        isActive
+          ? "bg-white/10 text-white"
+          : "text-white/85 hover:text-white hover:bg-white/5",
+      ].join(" ")
+    }
+  >
+    {icon ? <span className="opacity-90 text-lg leading-none">{icon}</span> : null}
     <span className="font-medium">{children}</span>
   </NavLink>
 );
@@ -37,40 +62,29 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [acctOpen, setAcctOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const acctBtnRef = useRef(null);
   const acctMenuRef = useRef(null);
 
-  /** hide sidebar on auth pages */
-  const showNav = useMemo(
-    () => !(location.pathname === "/login" || location.pathname === "/signup"),
-    [location.pathname]
-  );
+  /* show on all pages except /login */
+  const showNav = useMemo(() => location.pathname !== "/login", [location.pathname]);
 
-  /** detect admin */
+  /* Admin? */
   const isAdmin = useMemo(() => {
     if (!user) return false;
     if (user.role && String(user.role).toUpperCase().includes("ADMIN")) return true;
     if (Array.isArray(user.roles)) {
-      return user.roles.some(r => String(r).toUpperCase().includes("ADMIN"));
+      return user.roles.some((r) => String(r).toUpperCase().includes("ADMIN"));
     }
     return false;
   }, [user]);
 
-  /** optional: auto-redirect admin to /admin landing */
-  useEffect(() => {
-    if (!showNav) return;
-    if (isAdmin && !location.pathname.startsWith("/admin")) {
-      // navigate("/admin", { replace: true });
-    }
-  }, [isAdmin, showNav, location.pathname, navigate]);
-
-  /** click-away + esc close */
+  /* Click-away + ESC for account menu/drawer */
   useEffect(() => {
     const onDoc = (e) => {
-      if (!acctOpen) return;
       if (
+        acctOpen &&
         acctMenuRef.current &&
         !acctMenuRef.current.contains(e.target) &&
         acctBtnRef.current &&
@@ -79,7 +93,12 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
         setAcctOpen(false);
       }
     };
-    const onEsc = (e) => e.key === "Escape" && (setAcctOpen(false), setDrawerOpen(false));
+    const onEsc = (e) => {
+      if (e.key === "Escape") {
+        setAcctOpen(false);
+        setDrawerOpen(false);
+      }
+    };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onEsc);
     return () => {
@@ -90,78 +109,108 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
 
   if (!showNav) return null;
 
-  /** shared menu (user vs admin) */
-  const Menu = ({ onNavigate }) =>
-    !isAdmin ? (
-      <nav className="space-y-2">
-        <Item to="/" icon="🏠" onClick={onNavigate}>Home</Item>
-        <Item to="/create" icon="➕" onClick={onNavigate}>New Claim</Item>
-        <Item to="/pending" icon="⏳" onClick={onNavigate}>Pending Claims</Item>
-        <Item to="/closed" icon="✅" onClick={onNavigate}>Closed Claims</Item>
-      </nav>
-    ) : (
-      <div className="space-y-2">
-        <button
-          onClick={() => { onNavigate?.(); navigate("/signup"); }}
-          className="w-full px-4 py-3 rounded-[1.25rem] font-medium text-white"
-          style={{ background: C_COCOA }}
-        >
-          Create Employee
-        </button>
-      </div>
-    );
-
-  const DisplayName =
+  const displayName =
     (user && (user.name || user.username || user.fullName || user.email)) || "User";
+
+  /* Desktop menus */
+  const UserMenu = () => (
+    <nav className="space-y-2">
+      <Item to="/"        icon={<FiHome        size={20} />}>Home</Item>
+      <Item to="/create"  icon={<FiPlus        size={20} />}>New Claim</Item>
+      <Item to="/pending" icon={<FiClock       size={20} />}>Pending Claims</Item>
+      <Item to="/closed"  icon={<FiCheckCircle size={20} />}>Closed Claims</Item>
+    </nav>
+  );
+
+  // Admin-only: Admin Home + New Employee (+ optional Upload)
+  const AdminMenu = () => (
+    <nav className="space-y-2">
+      <Item to="/admin"  icon={<FiHome     size={20} />}>Admin Home</Item>
+      <Item to="/signup" icon={<FiUserPlus size={20} />}>New Employee</Item>
+      {/* If you add an upload page, uncomment next line and create the route: /admin/upload */}
+      {/* <Item to="/admin/upload" icon={<FiUpload size={20} />}>Upload Program</Item> */}
+    </nav>
+  );
+
+  /* Drawer menus (mobile) */
+  const UserDrawer = ({ onNavigate }) => (
+    <nav className="space-y-1.5">
+      <DrawerItem to="/"        icon={<FiHome        size={18} />} onClick={onNavigate}>Home</DrawerItem>
+      <DrawerItem to="/create"  icon={<FiPlus        size={18} />} onClick={onNavigate}>New Claim</DrawerItem>
+      <DrawerItem to="/pending" icon={<FiClock       size={18} />} onClick={onNavigate}>Pending Claims</DrawerItem>
+      <DrawerItem to="/closed"  icon={<FiCheckCircle size={18} />} onClick={onNavigate}>Closed Claims</DrawerItem>
+    </nav>
+  );
+
+  const AdminDrawer = ({ onNavigate }) => (
+    <nav className="space-y-1.5">
+      <DrawerItem to="/admin"  icon={<FiHome     size={18} />} onClick={onNavigate}>Admin Home</DrawerItem>
+      <DrawerItem to="/signup" icon={<FiUserPlus size={18} />} onClick={onNavigate}>New Employee</DrawerItem>
+      {/* <DrawerItem to="/admin/upload" icon={<FiUpload size={18} />} onClick={onNavigate}>Upload Program</DrawerItem> */}
+    </nav>
+  );
 
   return (
     <>
-      {/* ───────────── Desktop sidebar ───────────── */}
+      {/* ───────── Desktop: fixed sidebar ───────── */}
       <aside
-        className="hidden md:flex w-72 shrink-0 flex-col p-5 sticky top-0 h-screen"
-        style={{ background: C_OFFEE, boxShadow: "0 10px 24px rgba(41,28,14,.12)" }}
+        className="max-md:hidden md:flex w-72 shrink-0 flex-col p-5 sticky md:top-6 ml-6 mr-6 my-6 rounded-[1.25rem] overflow-y-auto"
+        style={{ background: C_OFFEE, boxShadow: "0 10px 24px rgba(15,46,42,.18)" }}
       >
         {/* Brand */}
         <button
           onClick={() => navigate(isAdmin ? "/admin" : "/")}
-          className="text-left text-white font-semibold text-lg mb-6"
+          className="text-left text-white font-semibold text-lg mb-6 truncate"
+          title={title}
         >
           {title}
         </button>
 
-        {/* Profile (avatar & online removed; keep name only) */}
+        {/* Profile */}
         <div className="mb-6">
-          <p className="text-white font-medium">{DisplayName}</p>
+          <p className="text-white font-medium truncate">{displayName}</p>
         </div>
 
         {/* Menu */}
-        <Menu />
+        {isAdmin ? <AdminMenu /> : <UserMenu />}
 
         {/* Account */}
-        <div className="mt-auto pt-6 border-t border-white/10">
-          <button
-            ref={acctBtnRef}
-            onClick={() => setAcctOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-white/90 hover:bg-white/5"
-          >
-            <span>Account</span>
-            <svg viewBox="0 0 20 20" className={`h-4 w-4 ${acctOpen ? "rotate-180" : ""}`} fill="currentColor">
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/>
-            </svg>
-          </button>
+        <div className="mt-auto pt-6" style={{ borderTop: `1px solid ${C_LINEN}1A` }}>
+          <div>
+            <button
+              ref={acctBtnRef}
+              onClick={() => setAcctOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-white/90 hover:bg-white/5"
+              title="Account"
+            >
+              <span>Account</span>
+              <FiChevronDown
+                className={`h-4 w-4 transition-transform ${acctOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+          </div>
+
           {acctOpen && (
-            <div ref={acctMenuRef} className="mt-2 bg-white/5 rounded-lg overflow-hidden">
+            <div
+              ref={acctMenuRef}
+              className="mt-2 w-full rounded-lg overflow-hidden shadow"
+              style={{
+                background: "rgba(255,255,255,.96)",
+                color: "#0F2E2A",
+                border: `1px solid ${C_LINEN}26`,
+              }}
+            >
               {!isAdmin && (
                 <button
                   onClick={() => { setAcctOpen(false); navigate("/profile"); }}
-                  className="w-full text-left px-4 py-2 text-white/90 hover:bg-white/10"
+                  className="block w-full text-left px-4 py-2 hover:bg-black/5"
                 >
                   View My Profile
                 </button>
               )}
               <button
                 onClick={() => { setAcctOpen(false); logout(); navigate("/login"); }}
-                className="w-full text-left px-4 py-2 text-white/90 hover:bg-white/10"
+                className="block w-full text-left px-4 py-2 hover:bg-black/5"
               >
                 Logout
               </button>
@@ -170,44 +219,74 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
         </div>
       </aside>
 
-      {/* ───────────── Mobile: top bar + drawer button ───────────── */}
+      {/* ───────── Mobile: tiny header + compact drawer ───────── */}
       <header
-        className="md:hidden sticky top-0 z-20 flex items-center justify-between px-4 py-3"
-        style={{ background: C_OFFEE, color: C_EGGSHELL }}
+        className="md:hidden fixed top-0 left-0 right-0 z-30 h-12 flex items-center justify-between px-3 border-b"
+        style={{ background: C_OFFEE, color: C_EGGSHELL, borderColor: `${C_LINEN}26` }}
       >
-        <button onClick={() => setDrawerOpen(true)} aria-label="Open menu">
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
-            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
+        <button onClick={() => setDrawerOpen(true)} aria-label="Open menu" className="p-1 -ml-1">
+          <FiMenu className="h-6 w-6" />
         </button>
-        <span className="font-semibold">{title}</span>
-        <span className="opacity-0 pointer-events-none">.</span>
+
+        <button
+          onClick={() => navigate(isAdmin ? "/admin" : "/")}
+          className="text-sm font-semibold truncate"
+          title={title}
+        >
+          {title}
+        </button>
+
+        <div className="w-6" /> {/* spacer */}
       </header>
 
-      {/* ───────────── Mobile drawer ───────────── */}
+      {/* Push page content below the small header on mobile */}
+      <div className="md:hidden h-12" />
+
+      {/* Drawer */}
       {drawerOpen && (
-        <div className="md:hidden fixed inset-0 z-30" onClick={() => setDrawerOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-40" onClick={() => setDrawerOpen(false)}>
           <div className="absolute inset-0 bg-black/40" />
           <div
-            className="absolute top-0 left-0 h-full w-72 p-5 flex flex-col"
+            className="absolute top-0 left-0 h-full w-64 max-w-[80vw] p-4 flex flex-col gap-3 rounded-r-2xl overflow-y-auto"
             style={{ background: C_OFFEE }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => { setDrawerOpen(false); navigate(isAdmin ? "/admin" : "/"); }}
-              className="text-left text-white text-lg font-semibold mb-6"
-            >
-              {title}
-            </button>
+            {/* Close button */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-white/80 text-sm">{displayName}</span>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close menu"
+                className="p-1 text-white/80 hover:text-white"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
 
-            <Menu onNavigate={() => setDrawerOpen(false)} />
+            {/* Menu */}
+            {isAdmin ? (
+              <AdminDrawer onNavigate={() => setDrawerOpen(false)} />
+            ) : (
+              <UserDrawer onNavigate={() => setDrawerOpen(false)} />
+            )}
 
-            <button
-              onClick={() => { setDrawerOpen(false); logout(); navigate("/login"); }}
-              className="mt-auto text-left px-4 py-3 rounded-[1.25rem] text-white/90 hover:bg-white/5"
-            >
-              Logout
-            </button>
+            {/* Account */}
+            <div className="mt-auto pt-3" style={{ borderTop: `1px solid ${C_LINEN}1A` }}>
+              {!isAdmin && (
+                <button
+                  onClick={() => { setDrawerOpen(false); navigate("/profile"); }}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-white/90 hover:bg-white/5"
+                >
+                  View My Profile
+                </button>
+              )}
+              <button
+                onClick={() => { setDrawerOpen(false); logout(); navigate("/login"); }}
+                className="w-full text-left px-3 py-2.5 rounded-xl text-white/90 hover:bg-white/5"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -235,12 +235,12 @@ export default function ClosedClaims() {
                 <div
                   key={id}
                   className="rounded-xl border overflow-hidden"
-                  style={{ borderColor: C_LINEN, background: C_CARD }}
+                  style={{ borderColor: C_NIGHT, background: C_CARD }}
                 >
                   {/* header */}
                   <div
                     className="flex items-center justify-between px-4 py-3 border-b"
-                    style={{ borderColor: C_GUN, background: C_GUN, color: "white" }}
+                    style={{ borderColor: C_NIGHT, background: C_NIGHT, color: "white" }}
                   >
                     <div className="min-w-0">
                       <div className="text-xs opacity-70 truncate">Claim #{id}</div>
@@ -310,11 +310,11 @@ export default function ClosedClaims() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div
             className="w-full max-w-5xl rounded-xl border shadow-xl overflow-hidden flex flex-col"
-            style={{ background: C_CARD, borderColor: C_LINEN }}
+            style={{ background: C_CARD, borderColor: C_NIGHT }}
           >
             <div
               className="flex items-center justify-between px-4 py-3 border-b"
-              style={{ borderColor: C_GUN, color: "white", background: C_GUN }}
+              style={{ borderColor: C_NIGHT, color: "white", background: C_NIGHT }}
             >
               <div className="min-w-0">
                 <div className="text-xs opacity-70 truncate">Claim #{viewer.claimId}</div>

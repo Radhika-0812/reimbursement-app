@@ -119,7 +119,7 @@ function Kpi({ label, value }) {
   return (
     <div
       className="rounded-[1.25rem] border p-4"
-      style={{ background: C_CARD, borderColor: C_LINEN }}
+      style={{ background: C_CARD, borderColor: C_NIGHT }}
     >
       <div className="text-sm" style={{ color: `${C_OFFEE}B3` }}>{label}</div>
       <div className="text-2xl font-semibold mt-1" style={{ color: C_OFFEE }}>{value}</div>
@@ -135,7 +135,7 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
       <div
         className="max-w-sm w-[360px] border rounded-xl p-4 pointer-events-auto shadow-2xl"
-        style={{ background: C_CARD, borderColor: C_LINEN, color: C_OFFEE }}
+        style={{ background: C_CARD, borderColor: C_NIGHT, color: C_OFFEE }}
       >
         <div className="font-medium text-base">{title}</div>
         {kind === "reject" && comment && (
@@ -147,7 +147,7 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
           <button
             onClick={onCancel}
             className="px-3 py-1.5 rounded border text-sm"
-            style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: C_OFFEE }}
+            style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
           >
             Cancel
           </button>
@@ -253,16 +253,16 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div
         className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-hidden"
-        style={{ background: C_CARD, borderColor: C_LINEN, color: C_OFFEE }}
+        style={{ background: C_CARD, borderColor: C_NIGHT, color: C_OFFEE }}
       >
         <div
           className="px-5 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: C_LINEN, background: C_GUN , color:"white" }}
+          style={{ borderColor: C_NIGHT, background: C_NIGHT , color:"white" }}
         >
           <div className="text-lg font-semibold">Claim Details</div>
           <button
             className="px-3 py-1 rounded border"
-            style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: C_OFFEE }}
+            style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
             onClick={onClose}
             ref={firstBtnRef}
           >
@@ -296,7 +296,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
           <div className="border rounded-lg overflow-hidden">
             <div
               className="px-3 py-2 text-sm border-b"
-              style={{ borderColor: C_LINEN, background: C_GUN ,color: "white" }}
+              style={{ borderColor: C_LINEN, background: C_NIGHT ,color: "white" }}
             >
               Receipt
             </div>
@@ -389,7 +389,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
         ) : (
           <div
             className="px-5 py-4 border-t flex justify-end"
-            style={{ borderColor: C_LINEN, background: C_CARD }}
+            style={{ borderColor: C_NIGHT, background: C_CARD }}
           >
             <button
               className="px-4 py-2 rounded border"
@@ -539,7 +539,7 @@ export default function AdminDashboard() {
         <button
           onClick={() => { fetchCounts(); fetchList(statusTab, page); toast("Refreshed", { type: "info", duration: 1500 }); }}
           className="px-3 py-2 rounded border"
-          style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: C_OFFEE }}
+          style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
         >
           Refresh
         </button>
@@ -563,7 +563,7 @@ export default function AdminDashboard() {
       {/* Export Panel */}
       <div
         className="flex flex-wrap items-end gap-3 p-3 border rounded-2xl"
-        style={{ background: C_CARD, borderColor: C_LINEN }}
+        style={{ background: C_CARD, borderColor: C_NIGHT }}
       >
         <div className="flex flex-col">
           <label className="text-sm mb-1" style={{ color: `${C_OFFEE}CC` }}>From</label>
@@ -572,7 +572,7 @@ export default function AdminDashboard() {
             value={from}
             onChange={(e)=>setFrom(e.target.value)}
             className="rounded px-2 py-1 border"
-            style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
+            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
           />
         </div>
         <div className="flex flex-col">
@@ -582,7 +582,7 @@ export default function AdminDashboard() {
             value={to}
             onChange={(e)=>setTo(e.target.value)}
             className="rounded px-2 py-1 border"
-            style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
+            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
           />
         </div>
         <div className="flex flex-col">
@@ -591,7 +591,7 @@ export default function AdminDashboard() {
             value={status}
             onChange={(e)=>setStatus(e.target.value)}
             className="rounded px-2 py-1 border"
-            style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
+            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
           >
             <option value="">All</option>
             <option value="PENDING">Pending</option>
@@ -605,7 +605,7 @@ export default function AdminDashboard() {
             value={format}
             onChange={(e)=>setFormat(e.target.value)}
             className="rounded px-2 py-1 border"
-            style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
+            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
           >
             <option value="xlsx">Excel (.xlsx)</option>
             <option value="pdf">PDF (.pdf)</option>
@@ -614,7 +614,7 @@ export default function AdminDashboard() {
         <button
           onClick={runExport}
           className="px-4 py-2 rounded text-white"
-          style={{ background: C_COCOA }}
+          style={{ background: C_NIGHT }}
         >
           Download
         </button>
@@ -623,11 +623,11 @@ export default function AdminDashboard() {
       {/* Unified table with status dropdown */}
       <div
         className="rounded-2xl border overflow-hidden"
-        style={{ background: C_CARD, borderColor: C_LINEN }}
+        style={{ background: C_CARD, borderColor: C_NIGHT }}
       >
         <div
           className="px-4 py-3 border-b text-sm flex items-center justify-between gap-2"
-          style={{ background: C_GUN, borderColor: C_LINEN, color: "white" }}
+          style={{ background: C_NIGHT, borderColor: C_NIGHT, color: "white" }}
         >
           <div>
             {headerLabel} Claims (page {page} of {pageCount}) — total {total}
@@ -636,7 +636,7 @@ export default function AdminDashboard() {
             <span style={{ color: "white" }}>View:</span>
             <select
               className="rounded px-2 py-1 border"
-              style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
+              style={{ background: C_EGGSHELL, borderColor: C_NIGHT, color: C_OFFEE }}
               value={statusTab}
               onChange={(e) => onChangeStatusTab(e.target.value)}
             >
@@ -650,7 +650,7 @@ export default function AdminDashboard() {
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm" style={{ color: "white" }}>
             <thead>
-              <tr style={{ background: C_GUN, color: "white" }}>
+              <tr style={{ background: C_NIGHT, color: "white" }}>
                 <th className="px-4 py-2 text-left">User Name</th>
                 <th className="px-4 py-2 text-left">Email</th>
                 <th className="px-4 py-2 text-left">Designation</th>
@@ -669,7 +669,7 @@ export default function AdminDashboard() {
               ) : tableRows.length === 0 ? (
                 <tr><td colSpan={COLS} className="px-4 py-8 text-center" style={{ color: `${C_OFFEE}99` }}>No data</td></tr>
               ) : tableRows.map((c) => (
-                <tr key={c.id} className="border-t" style={{ borderColor: C_LINEN  , color:C_GUN}}>
+                <tr key={c.id} className="border-t" style={{ borderColor: C_NIGHT  , color:C_NIGHT}}>
                   <td className="px-4 py-2">{displayUserName(c)}</td>
                   <td className="px-4 py-2" title={displayUserEmail(c)}>{displayUserEmail(c)}</td>
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
@@ -690,7 +690,7 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2 text-right">
                     <button
                       className="px-3 py-1 rounded"
-                      style={{ background: C_GUN, color: C_EGGSHELL }}
+                      style={{ background: C_NIGHT, color: C_EGGSHELL }}
                       onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
                     >
                       View more
@@ -704,14 +704,14 @@ export default function AdminDashboard() {
 
         <div
           className="px-4 py-3 border-t"
-          style={{ background: C_GUN, borderColor: C_LINEN , color:"white"}}
+          style={{ background: C_NIGHT, borderColor: C_NIGHT , color:"white"}}
         >
           <div className="flex items-center justify-between">
             <div />
             <div>
               <button
                 className="px-3 py-1 rounded border mr-2 disabled:opacity-50"
-                style={{ borderColor: C_LINEN, background: C_GUN, color: "white" }}
+                style={{ borderColor: C_LINEN, background: C_NIGHT, color: "white" }}
                 onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page <= 1}
               >
@@ -722,7 +722,7 @@ export default function AdminDashboard() {
               </span>
               <button
                 className="px-3 py-1 rounded border ml-2 disabled:opacity-50"
-                style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: "white" }}
+                style={{ borderColor: C_LINEN, background: C_NIGHT, color: C_CLOUD }}
                 onClick={() => { const p = Math.min(pageCount, page + 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page >= pageCount}
               >

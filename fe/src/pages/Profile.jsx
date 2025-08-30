@@ -109,9 +109,9 @@ export default function Profile() {
       </div>
 
       {/* Card */}
-      <div className="rounded-[1.25rem] border shadow-sm overflow-hidden" style={{ borderColor: C_LINEN, background: C_CARD }}>
+      <div className="rounded-[1.25rem] border shadow-sm overflow-hidden" style={{ borderColor: C_NIGHT,color:C_CLOUD, background: C_CLOUD }}>
         <div className="flex items-center justify-between px-4 py-3 border-b"
-             style={{ borderColor: C_LINEN, background: C_CARD_HDR, color: C_OFFEE }}>
+             style={{ borderColor: C_NIGHT, background: C_NIGHT, color: C_CLOUD }}>
           <div className="font-medium">Profile Information</div>
           <button
             onClick={() => window.location.reload()}
@@ -126,7 +126,7 @@ export default function Profile() {
         <div className="p-4">
           {error && (
             <div className="mb-3 text-sm rounded-md px-3 py-2 border"
-                 style={{ color: "#b91c1c", background: "#fff1f2", borderColor: "#fecaca" }}>
+                 style={{ color: C_CLOUD, background: C_NIGHT, borderColor: "#fecaca" }}>
               {error}
             </div>
           )}
