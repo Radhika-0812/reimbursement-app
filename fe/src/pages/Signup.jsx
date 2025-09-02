@@ -224,6 +224,8 @@ function Textarea({ label, name, value, onChange, required }) {
           color: "var(--foreground)",
         }}
       />
+      
+      {/* <div></div> */}
     </label>
   );
 }
