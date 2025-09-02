@@ -13,7 +13,7 @@ export function signup(body) {
     email: String(body.email ?? ""),
     password: String(body.password ?? ""),
     designation: String(body.designation ?? ""),
-   // currency: String(body.currency ?? ""),
+    currencyCode: String(body.currencyCode ?? ""),
   };
   return http("/api/auth/signup", { method: "POST", body: JSON.stringify(payload) });
 }

@@ -1,9 +1,12 @@
 // src/pages/Signup.jsx
 import React, { useState } from "react";
 import { useAuth } from "../state/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function Signup() {
   const { signup } = useAuth();
+  const navigate = useNavigate();
+
   const [form, setForm] = useState({
     name: "",
     department: "",
@@ -13,7 +16,7 @@ export default function Signup() {
     designation: "",
     email: "",
     password: "",
-    // currency: "INR", // default
+    currencyCode: "INR", // default
   });
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
@@ -34,25 +37,29 @@ export default function Signup() {
       setErr("Password must be at least 8 characters");
       return;
     }
-    if (!["INR", "MYR"].includes(form.currency)) {
+    if (!["INR", "MYR"].includes(form.currencyCode)) {
       setErr("Please choose a valid currency (INR or MYR)");
       return;
     }
 
     try {
       setBusy(true);
-      // if your backend expects "contactNo" instead of "contact", change it here.
       await signup({
         name: form.name,
         department: form.department,
-        contact: form.contactNo,
+        contact: form.contactNo,          // backend field
         address: form.address,
         designation: form.designation,
         pincode: form.pincode,
         email: form.email,
         password: form.password,
-        // currency: form.currency,
+        currencyCode: form.currencyCode,  // required by backend
       });
+
+      // ✅ redirect to admin on success
+      navigate("/admin", { replace: true });
+    } catch (e) {
+      setErr(e?.responseText || e?.message || "Signup failed");
     } finally {
       setBusy(false);
     }
@@ -94,10 +101,10 @@ export default function Signup() {
             <Input type="email" label="Email ID" name="email" value={form.email} onChange={onChange} required />
 
             {/* Currency dropdown */}
-            {/* <CurrencySelect
-              value={form.currency}
-              onChange={(next) => setForm((s) => ({ ...s, currency: next }))}
-            /> */}
+            <CurrencySelect
+              value={form.currencyCode}
+              onChange={(next) => setForm((s) => ({ ...s, currencyCode: next }))}
+            />
 
             {/* Password */}
             <label className="block text-sm">

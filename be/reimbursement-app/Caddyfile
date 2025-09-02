@@ -1,8 +1,0 @@
-reimbursementapp.makingmindstechnologies.com {
-    reverse_proxy rms-app:8080
-    encode gzip
-    # optional security header (enable after you confirm HTTPS works)
-    # header {
-    #     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    # }
-}
