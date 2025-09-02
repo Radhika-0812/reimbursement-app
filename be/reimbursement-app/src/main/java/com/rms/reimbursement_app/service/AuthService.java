@@ -1,5 +1,6 @@
 package com.rms.reimbursement_app.service;
 
+import com.rms.reimbursement_app.domain.CurrencyCode;
 import com.rms.reimbursement_app.domain.User;
 import com.rms.reimbursement_app.dto.LoginRequest;
 import com.rms.reimbursement_app.dto.SignupRequest;
@@ -43,7 +44,7 @@ public class AuthService {
         // normalize role to Spring style ROLE_*
         String role = "ROLE_USER";
         u.setRole(role);
-
+        u.setCurrencyCode(req.currencyCode() == null ? CurrencyCode.INR : req.currencyCode());
         u.setDepartment(req.department().trim());
         u.setDesignation(req.designation().trim());
         u.setAddress(req.address().trim());

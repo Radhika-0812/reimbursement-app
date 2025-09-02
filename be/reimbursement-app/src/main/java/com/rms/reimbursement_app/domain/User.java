@@ -10,6 +10,9 @@ public class User {
     @Column(nullable=false, unique=true, length=190) private String email;
     @Column(nullable=false, length=100) private String passwordHash;
     @Column(nullable=false, length=30) private String role;// ROLE_USER / ROLE_ADMIN
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency_code", nullable = false, length = 3)
+    private CurrencyCode currencyCode = CurrencyCode.INR;
     @Column(nullable = false, length = 30) private String department;
     @Column(nullable = false, length = 100) private String address;
     @Column(nullable = false, length = 10) private String contact;

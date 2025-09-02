@@ -8,7 +8,12 @@ import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "claims")
@@ -32,12 +37,18 @@ public class Claim {
     @Column(nullable = false, length = 140)
     private String title;
 
-
+    // 👇 NEW — date user is claiming for (not createdAt)
+    @Column(name = "claim_date")
+    private LocalDate claimDate;
 
 
     // store amounts in cents/paise
     @Column(nullable = false)
     private Long amountCents;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency_code", length = 3, nullable = false)
+    private CurrencyCode currencyCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
@@ -85,7 +96,9 @@ public class Claim {
     }
 
     @PreUpdate
-    void touch() { this.updatedAt = Instant.now(); }
+    void touch() {
+        this.updatedAt = Instant.now();
+    }
 
     // -------- Convenience (read-only) accessors sourced from User --------
     @Transient
@@ -102,4 +115,5 @@ public class Claim {
     public String getDesignation() {
         return user != null ? user.getDesignation() : null;
     }
+
 }

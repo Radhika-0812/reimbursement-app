@@ -1,0 +1,9 @@
+.git
+.gitignore
+.gradle
+build
+node_modules
+**/*.iml
+.gradle/
+out/
+.DS_Store

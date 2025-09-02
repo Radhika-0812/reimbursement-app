@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
-import { C_OFFEE, C_COCOA, C_LINEN, C_EGGSHELL } from "../theme/palette";
 
 // Feather icons via react-icons
 import {
@@ -13,8 +12,8 @@ import {
   FiChevronDown,
   FiMenu,
   FiX,
-  FiUserPlus,   // NEW
-  FiUpload,     // (optional) if you later add an upload page
+  FiUserPlus,
+  FiUpload,
 } from "react-icons/fi";
 
 /* Desktop nav item */
@@ -23,14 +22,14 @@ const Item = ({ to, icon, children, onClick }) => (
     to={to}
     end
     onClick={onClick}
-    className={({ isActive }) =>
-      [
-        "flex items-center gap-3 px-4 py-3 rounded-[1.25rem] transition select-none",
-        isActive
-          ? "bg-white/10 text-white shadow"
-          : "text-white/80 hover:text-white hover:bg-white/5",
-      ].join(" ")
-    }
+    className="flex items-center gap-3 px-4 py-3 rounded-[1.25rem] transition select-none hover:bg-[var(--sidebar-accent)]"
+    style={({ isActive }) => ({
+      background: isActive ? "var(--sidebar-primary)" : "transparent",
+      color: isActive
+        ? "var(--sidebar-primary-foreground)"
+        : "var(--sidebar-foreground)",
+      boxShadow: isActive ? "var(--shadow-sm)" : "none",
+    })}
   >
     {icon ? <span className="opacity-90 text-xl leading-none">{icon}</span> : null}
     <span className="font-medium">{children}</span>
@@ -43,14 +42,13 @@ const DrawerItem = ({ to, icon, children, onClick }) => (
     to={to}
     end
     onClick={onClick}
-    className={({ isActive }) =>
-      [
-        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition select-none",
-        isActive
-          ? "bg-white/10 text-white"
-          : "text-white/85 hover:text-white hover:bg-white/5",
-      ].join(" ")
-    }
+    className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition select-none hover:bg-[var(--sidebar-accent)]"
+    style={({ isActive }) => ({
+      background: isActive ? "var(--sidebar-primary)" : "transparent",
+      color: isActive
+        ? "var(--sidebar-primary-foreground)"
+        : "var(--sidebar-foreground)",
+    })}
   >
     {icon ? <span className="opacity-90 text-lg leading-none">{icon}</span> : null}
     <span className="font-medium">{children}</span>
@@ -127,7 +125,6 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
     <nav className="space-y-2">
       <Item to="/admin"  icon={<FiHome     size={20} />}>Admin Home</Item>
       <Item to="/signup" icon={<FiUserPlus size={20} />}>New Employee</Item>
-      {/* If you add an upload page, uncomment next line and create the route: /admin/upload */}
       {/* <Item to="/admin/upload" icon={<FiUpload size={20} />}>Upload Program</Item> */}
     </nav>
   );
@@ -155,33 +152,45 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
       {/* ───────── Desktop: fixed sidebar ───────── */}
       <aside
         className="max-md:hidden md:flex w-72 shrink-0 flex-col p-5 sticky md:top-6 ml-6 mr-6 my-6 rounded-[1.25rem] overflow-y-auto"
-        style={{ background: C_OFFEE, boxShadow: "0 10px 24px rgba(15,46,42,.18)" }}
+        style={{
+          background: "var(--sidebar)",
+          color: "var(--sidebar-foreground)",
+          boxShadow: "var(--shadow-lg)",
+          border: "1px solid var(--sidebar-border)",
+        }}
       >
         {/* Brand */}
         <button
           onClick={() => navigate(isAdmin ? "/admin" : "/")}
-          className="text-left text-white font-semibold text-lg mb-6 truncate"
+          className="text-left font-semibold text-lg mb-6 truncate"
           title={title}
+          style={{ color: "var(--sidebar-foreground)" }}
         >
           {title}
         </button>
 
         {/* Profile */}
         <div className="mb-6">
-          <p className="text-white font-medium truncate">{displayName}</p>
+          <p className="font-medium truncate" style={{ color: "var(--sidebar-foreground)" }}>
+            {displayName}
+          </p>
         </div>
 
         {/* Menu */}
         {isAdmin ? <AdminMenu /> : <UserMenu />}
 
         {/* Account */}
-        <div className="mt-auto pt-6" style={{ borderTop: `1px solid ${C_LINEN}1A` }}>
+        <div className="mt-auto pt-6" style={{ borderTop: "1px solid var(--sidebar-border)" }}>
           <div>
             <button
               ref={acctBtnRef}
               onClick={() => setAcctOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-white/90 hover:bg-white/5"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg transition"
               title="Account"
+              style={{
+                color: "var(--sidebar-foreground)",
+                background: "transparent",
+              }}
             >
               <span>Account</span>
               <FiChevronDown
@@ -193,24 +202,24 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
           {acctOpen && (
             <div
               ref={acctMenuRef}
-              className="mt-2 w-full rounded-lg overflow-hidden shadow"
+              className="mt-2 w-full rounded-lg overflow-hidden shadow border"
               style={{
-                background: "rgba(255,255,255,.96)",
-                color: "#0F2E2A",
-                border: `1px solid ${C_LINEN}26`,
+                background: "var(--card)",
+                color: "var(--foreground)",
+                borderColor: "var(--border)",
               }}
             >
               {!isAdmin && (
                 <button
                   onClick={() => { setAcctOpen(false); navigate("/profile"); }}
-                  className="block w-full text-left px-4 py-2 hover:bg-black/5"
+                  className="block w-full text-left px-4 py-2 hover:bg-[var(--sidebar-accent)]"
                 >
                   View My Profile
                 </button>
               )}
               <button
                 onClick={() => { setAcctOpen(false); logout(); navigate("/login"); }}
-                className="block w-full text-left px-4 py-2 hover:bg-black/5"
+                className="block w-full text-left px-4 py-2 hover:bg-[var(--sidebar-accent)]"
               >
                 Logout
               </button>
@@ -222,7 +231,11 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
       {/* ───────── Mobile: tiny header + compact drawer ───────── */}
       <header
         className="md:hidden fixed top-0 left-0 right-0 z-30 h-12 flex items-center justify-between px-3 border-b"
-        style={{ background: C_OFFEE, color: C_EGGSHELL, borderColor: `${C_LINEN}26` }}
+        style={{
+          background: "var(--sidebar)",
+          color: "var(--sidebar-foreground)",
+          borderColor: "var(--sidebar-border)",
+        }}
       >
         <button onClick={() => setDrawerOpen(true)} aria-label="Open menu" className="p-1 -ml-1">
           <FiMenu className="h-6 w-6" />
@@ -232,6 +245,7 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
           onClick={() => navigate(isAdmin ? "/admin" : "/")}
           className="text-sm font-semibold truncate"
           title={title}
+          style={{ color: "var(--sidebar-foreground)" }}
         >
           {title}
         </button>
@@ -245,19 +259,26 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
       {/* Drawer */}
       {drawerOpen && (
         <div className="md:hidden fixed inset-0 z-40" onClick={() => setDrawerOpen(false)}>
-          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0" style={{ background: "rgb(0 0 0 / 0.4)" }} />
           <div
-            className="absolute top-0 left-0 h-full w-64 max-w-[80vw] p-4 flex flex-col gap-3 rounded-r-2xl overflow-y-auto"
-            style={{ background: C_OFFEE }}
+            className="absolute top-0 left-0 h-full w-64 max-w-[80vw] p-4 flex flex-col gap-3 rounded-r-2xl overflow-y-auto border-r"
+            style={{
+              background: "var(--sidebar)",
+              color: "var(--sidebar-foreground)",
+              borderColor: "var(--sidebar-border)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
             <div className="flex items-center justify-between mb-2">
-              <span className="text-white/80 text-sm">{displayName}</span>
+              <span className="text-sm" style={{ color: "var(--sidebar-foreground)" }}>
+                {displayName}
+              </span>
               <button
                 onClick={() => setDrawerOpen(false)}
                 aria-label="Close menu"
-                className="p-1 text-white/80 hover:text-white"
+                className="p-1"
+                style={{ color: "var(--sidebar-foreground)" }}
               >
                 <FiX className="h-5 w-5" />
               </button>
@@ -271,18 +292,18 @@ export default function Sidebar({ title = "Reimbursement Portal" }) {
             )}
 
             {/* Account */}
-            <div className="mt-auto pt-3" style={{ borderTop: `1px solid ${C_LINEN}1A` }}>
+            <div className="mt-auto pt-3" style={{ borderTop: "1px solid var(--sidebar-border)" }}>
               {!isAdmin && (
                 <button
                   onClick={() => { setDrawerOpen(false); navigate("/profile"); }}
-                  className="w-full text-left px-3 py-2.5 rounded-xl text-white/90 hover:bg-white/5"
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[var(--sidebar-accent)]"
                 >
                   View My Profile
                 </button>
               )}
               <button
                 onClick={() => { setDrawerOpen(false); logout(); navigate("/login"); }}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-white/90 hover:bg-white/5"
+                className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[var(--sidebar-accent)]"
               >
                 Logout
               </button>

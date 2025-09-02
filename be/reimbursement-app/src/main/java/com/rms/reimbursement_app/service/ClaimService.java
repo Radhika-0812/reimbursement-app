@@ -1,5 +1,6 @@
 package com.rms.reimbursement_app.service;
 
+import com.rms.reimbursement_app.domain.CurrencyCode;
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
@@ -15,7 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+
+
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -55,10 +59,14 @@ public class ClaimService {
             c.setUserId(userId);
             c.setTitle(in.getTitle());
             c.setAmountCents(in.getAmountCents());
+            c.setCurrencyCode(in.getCurrencyCode());
             c.setClaimType(in.getClaimType());
             c.setDescription(in.getDescription());
             c.setReceiptUrl(in.getReceiptUrl()); // keep if you still use external URLs
             c.setStatus(ClaimStatus.PENDING);
+            c.setClaimDate(in.getClaimDate() != null ? in.getClaimDate() : LocalDate.now());
+
+
             return c;
         }).toList();
 

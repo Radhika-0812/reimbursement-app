@@ -2,6 +2,7 @@ package com.rms.reimbursement_app.dto;
 
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
+import com.rms.reimbursement_app.domain.CurrencyCode;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;

@@ -1,13 +1,5 @@
 // src/components/Pagination.jsx
 import React from "react";
-import { C_NIGHT, C_GUN, C_SLATE, C_STEEL, C_CLOUD } from "../theme/palette";
-
-/** Map to app names */
-const C_OFFEE    = C_NIGHT;  // strongest text
-const C_COCOA    = C_GUN;    // active page / primary
-const C_LINEN    = C_SLATE;  // borders
-const C_EGGSHELL = C_STEEL;  // default button bg
-const C_CARD     = C_CLOUD;  // (unused here, kept for parity)
 
 export default function Pagination({ page, total, pageSize = 5, onPage }) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -16,11 +8,8 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
 
   // compact page buttons (1 … current-1, current, current+1 … last)
   const pages = [];
-  const push = (v, label = String(v), disabled = false) =>
-    pages.push({ v, label, disabled });
-  const addRange = (from, to) => {
-    for (let i = from; i <= to; i++) push(i);
-  };
+  const push = (v, label = String(v), disabled = false) => pages.push({ v, label, disabled });
+  const addRange = (from, to) => { for (let i = from; i <= to; i++) push(i); };
 
   push(1);
   if (page > 3) push(null, "…", true);
@@ -31,8 +20,19 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
   const baseBtn =
     "px-3 py-1.5 rounded-md border text-sm transition-opacity select-none focus:outline-none focus-visible:ring-2";
 
+  const subtle = {
+    background: "var(--sidebar-accent)",
+    borderColor: "var(--border)",
+    color: "var(--foreground)",
+  };
+  const active = {
+    background: "var(--primary)",
+    borderColor: "var(--primary)",
+    color: "var(--primary-foreground)",
+  };
+
   return (
-    <div className="mt-4 flex items-center justify-between gap-2" style={{ color: C_OFFEE }}>
+    <div className="mt-4 flex items-center justify-between gap-2" style={{ color: "var(--foreground)" }}>
       {/* Prev */}
       <button
         onClick={() => canPrev && onPage(page - 1)}
@@ -40,11 +40,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
         aria-disabled={!canPrev}
         aria-label="Previous page"
         className={`${baseBtn} ${!canPrev ? "opacity-60 cursor-not-allowed" : "hover:opacity-90"}`}
-        style={{
-          background: C_EGGSHELL,
-          borderColor: C_LINEN,
-          color: C_OFFEE,
-        }}
+        style={subtle}
       >
         Prev
       </button>
@@ -53,7 +49,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
       <div className="flex items-center gap-1">
         {pages.map((p, idx) =>
           p.disabled ? (
-            <span key={idx} className="px-2" style={{ color: `${C_OFFEE}80` }}>
+            <span key={idx} className="px-2" style={{ color: "color-mix(in oklch, var(--foreground) 50%, transparent)" }}>
               …
             </span>
           ) : (
@@ -63,11 +59,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
               aria-current={p.v === page ? "page" : undefined}
               aria-label={p.v === page ? `Page ${p.label}, current` : `Go to page ${p.label}`}
               className={`${baseBtn} hover:opacity-90`}
-              style={
-                p.v === page
-                  ? { background: C_COCOA, color: C_EGGSHELL, borderColor: C_COCOA }
-                  : { background: C_EGGSHELL, color: C_OFFEE, borderColor: C_LINEN }
-              }
+              style={p.v === page ? active : subtle}
             >
               {p.label}
             </button>
@@ -82,11 +74,7 @@ export default function Pagination({ page, total, pageSize = 5, onPage }) {
         aria-disabled={!canNext}
         aria-label="Next page"
         className={`${baseBtn} ${!canNext ? "opacity-60 cursor-not-allowed" : "hover:opacity-90"}`}
-        style={{
-          background: C_EGGSHELL,
-          borderColor: C_LINEN,
-          color: C_OFFEE,
-        }}
+        style={subtle}
       >
         Next
       </button>

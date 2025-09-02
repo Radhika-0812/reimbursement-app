@@ -12,7 +12,8 @@ export function signup(body) {
     pincode: String(body.pincode ?? ""),
     email: String(body.email ?? ""),
     password: String(body.password ?? ""),
-    designation: String(body.designation ?? "")
+    designation: String(body.designation ?? ""),
+   // currency: String(body.currency ?? ""),
   };
   return http("/api/auth/signup", { method: "POST", body: JSON.stringify(payload) });
 }

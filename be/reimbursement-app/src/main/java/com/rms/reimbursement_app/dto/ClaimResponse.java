@@ -1,10 +1,12 @@
 package com.rms.reimbursement_app.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.rms.reimbursement_app.domain.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.sql.Struct;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
@@ -17,12 +19,14 @@ public class ClaimResponse {
     private String title;
     private String userEmail;
     private Long amountCents;
-    private BigDecimal amountRupees;   // computed for display
+    private CurrencyCode currencyCode;
+    private BigDecimal amountRupees;
     private ClaimType claimType;
     private String description;
     private String receiptUrl;
     private ClaimStatus status;
     private String adminComment;
+    private LocalDate claimDate;
     private Instant createdAt;
     private Instant updatedAt;
     private String designation;
@@ -39,12 +43,14 @@ public class ClaimResponse {
                 .title(c.getTitle())
                 .userEmail(c.getUserEmail())
                 .amountCents(c.getAmountCents())
+                .currencyCode(c.getCurrencyCode())
                 .amountRupees(centsToRupees(c.getAmountCents()))
                 .claimType(c.getClaimType())
                 .description(c.getDescription())
                 .receiptUrl(c.getReceiptUrl())
                 .status(c.getStatus())
                 .adminComment(c.getAdminComment())
+                .claimDate(c.getClaimDate())
                 .createdAt(c.getCreatedAt())
                 .updatedAt(c.getUpdatedAt())
                 .designation(c.getDesignation())

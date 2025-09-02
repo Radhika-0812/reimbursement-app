@@ -4,6 +4,7 @@ package com.rms.reimbursement_app.dto;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
 import com.rms.reimbursement_app.domain.ClaimType;
+import com.rms.reimbursement_app.domain.CurrencyCode;
 import lombok.Value;
 
 import java.time.Instant;
@@ -16,6 +17,7 @@ public class AdminClaimView {
     String userEmail;
     String title;
     long amountCents;
+    CurrencyCode currencyCode;
     ClaimType claimType;
     String description;
     String adminComment;
@@ -33,6 +35,7 @@ public class AdminClaimView {
                 c.getUserEmail(),
                 c.getTitle(),
                 c.getAmountCents(),
+                c.getCurrencyCode(),
                 c.getClaimType(),
                 c.getDescription(),
                 c.getAdminComment(),

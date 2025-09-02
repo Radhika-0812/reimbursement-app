@@ -2,38 +2,45 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { downloadToDisk } from "../services/download";
 import { toast } from "../lib/toast";
-import { centsFromClaim, formatCents } from "../lib/money";
-import { C_NIGHT, C_CHAR, C_CLOUD, C_GUN, C_SLATE, C_STEEL } from "../theme/palette";
+import {
+  centsFromClaim,
+  formatCentsForClaim,
+  formatCents,
+  currencyOfClaim,
+} from "../lib/money";
+import { C_CHAR, C_STEEL } from "../theme/palette";
 
-/** ─── Palette (swatch-aligned) ─── */
-const C_OFFEE    = C_NIGHT;  // primary text
-const C_COCOA    = C_GUN;    // primary action
-const C_TAUPE    = C_CHAR;   // secondary action/accent
-const C_LINEN    = C_SLATE;  // borders
-const C_EGGSHELL = C_STEEL;  // inputs/light bg
-const C_CARD     = C_CLOUD;  // cards
-const C_CARD_HDR = "#E9DFD2"; // card headers (kept)
+/* ===== Semantic colors ===== */
+const FG = "var(--foreground)";
+const BG = "var(--background)";
+const PRI = "var(--primary)";
+const PRI_FG = "var(--primary-foreground)";
+const C_TAUPE = C_CHAR;   // secondary (reject)
+const C_EGGSHELL = C_STEEL; // input bg
+const BORDER = FG;        // borders
+const SURFACE = BG;       // surfaces
 
-/** ---- Config ---- */
+/* ===== Config ===== */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const ENDPOINTS = {
-  pending:  "/api/admin/claims/pending",
+  pending: "/api/admin/claims/pending",
   approved: "/api/admin/claims/approved",
   rejected: "/api/admin/claims/rejected",
   approveTpl: "/api/admin/claims/:id/approve",
-  rejectTpl:  "/api/admin/claims/:id/reject",
+  rejectTpl: "/api/admin/claims/:id/reject",
   adminExport: "/api/admin/claims/export",
 };
 const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token";
-
+const PAGE_SIZE = 10;
 const STATUS_OPTIONS = ["PENDING", "APPROVED", "REJECTED"];
 const STATUS_TO_ENDPOINT = {
   PENDING: ENDPOINTS.pending,
   APPROVED: ENDPOINTS.approved,
   REJECTED: ENDPOINTS.rejected,
 };
+const EMAIL_PARAM_KEYS = ["email", "userEmail", "user_email", "user"];
 
-/** ---- HTTP helper ---- */
+/* ===== Utils ===== */
 async function http(method, path, { body, token, headers: extraHeaders } = {}) {
   const url = path.startsWith("http") ? path : API_BASE_URL + path;
   const headers = { ...(extraHeaders || {}) };
@@ -73,7 +80,6 @@ function getAuth() {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** ---------- Value helpers ---------- */
 function firstNonEmpty(...candidates) {
   for (const v of candidates) {
     if (v !== undefined && v !== null) {
@@ -83,7 +89,6 @@ function firstNonEmpty(...candidates) {
   }
   return "—";
 }
-
 const EMAIL_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 function extractEmailDeep(obj, depth = 0) {
   if (!obj || typeof obj !== "object" || depth > 2) return null;
@@ -97,37 +102,75 @@ function extractEmailDeep(obj, depth = 0) {
   }
   return null;
 }
-
 function displayUserName(c) {
   return firstNonEmpty(
-    c.userName, c.user_name,
-    c.user?.name, c.user?.fullName, c.user?.username,
-    c.name, c.fullName
+    c.userName,
+    c.user_name,
+    c.user?.name,
+    c.user?.fullName,
+    c.user?.username,
+    c.name,
+    c.fullName
   );
 }
 function displayUserEmail(c) {
   return firstNonEmpty(
-    c.userEmail, c.user_email, c.email, c.user?.email, extractEmailDeep(c)
+    c.userEmail,
+    c.user_email,
+    c.email,
+    c.user?.email,
+    extractEmailDeep(c)
   );
 }
 function displayDesignation(c) {
-  return firstNonEmpty(c.designation, c.userDesignation, c.user_designation, c.user?.designation);
+  return firstNonEmpty(
+    c.designation,
+    c.userDesignation,
+    c.user_designation,
+    c.user?.designation
+  );
+}
+function withinRange(dateStr, from, to) {
+  if (!from && !to) return true;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return true;
+  if (from && d < new Date(from)) return false;
+  if (to && d > new Date(to + "T23:59:59")) return false;
+  return true;
+}
+function monthBounds(year, month /* "01".."12" */) {
+  const y = Number(year);
+  const m = Number(month);
+  if (!y || !m) return { from: "", to: "" };
+  const start = new Date(Date.UTC(y, m - 1, 1));
+  const end = new Date(Date.UTC(y, m, 0));
+  const toISO = (dt) => dt.toISOString().slice(0, 10);
+  return { from: toISO(start), to: toISO(end) };
+}
+function mergeEmails(prev, additions) {
+  const map = new Map(prev.map((x) => [x.email.toLowerCase(), x]));
+  for (const a of additions) {
+    if (!a?.email) continue;
+    const k = a.email.toLowerCase();
+    if (!map.has(k)) map.set(k, a);
+  }
+  return Array.from(map.values()).sort((a, b) => a.email.localeCompare(b.email));
 }
 
-/** ---- UI bits ---- */
+/* ===== KPIs ===== */
 function Kpi({ label, value }) {
   return (
     <div
       className="rounded-[1.25rem] border p-4"
-      style={{ background: C_CARD, borderColor: C_NIGHT }}
+      style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
     >
-      <div className="text-sm" style={{ color: `${C_OFFEE}B3` }}>{label}</div>
-      <div className="text-2xl font-semibold mt-1" style={{ color: C_OFFEE }}>{value}</div>
+      <div className="text-sm" style={{ color: `${FG}B3` }}>{label}</div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
 
-/** Small, toast-like confirmation panel */
+/* ===== Tiny confirm toast ===== */
 function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
   if (!open) return null;
   const title = kind === "approve" ? "Approve this claim?" : "Reject this claim?";
@@ -135,29 +178,26 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
       <div
         className="max-w-sm w-[360px] border rounded-xl p-4 pointer-events-auto shadow-2xl"
-        style={{ background: C_CARD, borderColor: C_NIGHT, color: C_OFFEE }}
+        style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
       >
         <div className="font-medium text-base">{title}</div>
         {kind === "reject" && comment && (
-          <div className="mt-1 text-xs" style={{ color: `${C_OFFEE}99` }}>
-            Reason: <span style={{ color: C_OFFEE }}>{comment}</span>
+          <div className="mt-1 text-xs" style={{ color: `${FG}99` }}>
+            Reason: <span style={{ color: FG }}>{comment}</span>
           </div>
         )}
         <div className="mt-3 flex justify-end gap-2">
           <button
             onClick={onCancel}
             className="px-3 py-1.5 rounded border text-sm"
-            style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
+            style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             className="px-3 py-1.5 rounded text-sm"
-            style={{
-              background: kind === "approve" ? C_COCOA : C_TAUPE,
-              color: C_EGGSHELL,
-            }}
+            style={{ background: kind === "approve" ? PRI : C_TAUPE, color: PRI_FG }}
           >
             Confirm
           </button>
@@ -167,13 +207,47 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
   );
 }
 
-/** Details modal with inline preview + toaster confirmations */
+/* ===== Fullscreen preview overlay (image/PDF) ===== */
+function FullscreenPreview({ open, onClose, preview }) {
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center" onClick={onClose}>
+      <button
+        aria-label="Close"
+        className="absolute top-4 right-4 px-3 py-2 rounded"
+        style={{ background: PRI, color: PRI_FG }}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+      >
+        ✕
+      </button>
+      <div className="max-w-[95vw] max-h-[92vh] w-full h-full p-2 flex items-center justify-center" onClick={(e)=>e.stopPropagation()}>
+        {preview?.supported ? (
+          preview.contentType.includes("pdf")
+            ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-full border-0 rounded-lg" />
+            : <img src={preview.url} alt="Receipt" className="max-w-full max-h-full rounded-lg object-contain" />
+        ) : (
+          <div className="text-white">Preview not available</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===== Details modal with inline preview + fullscreen expand ===== */
 function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct }) {
   const [preview, setPreview] = useState({ url: "", contentType: "", filename: "", has: false, supported: false });
   const [rejectComment, setRejectComment] = useState("");
   const [rejectNeedsComment, setRejectNeedsComment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirm, setConfirm] = useState({ open: false, kind: null });
+  const [full, setFull] = useState(false);
   const firstBtnRef = useRef(null);
 
   useEffect(() => {
@@ -182,6 +256,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
     setRejectNeedsComment(false);
     setSubmitting(false);
     setConfirm({ open: false, kind: null });
+    setFull(false);
     setTimeout(() => firstBtnRef.current?.focus(), 50);
   }, [open]);
 
@@ -233,7 +308,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
 
   if (!open || !claim) return null;
 
-  const amountCents = formatCents(centsFromClaim(claim));
+  const amountStr = formatCentsForClaim(claim); // shows INR/MYR with integer amount
   const submittedAt = new Date(claim.createdAt ?? claim.created_at ?? Date.now()).toLocaleString();
   const isRejected = String(claim?.status).toUpperCase() === "REJECTED";
   const adminComment = firstNonEmpty(claim?.adminComment, claim?.admin_comment);
@@ -250,175 +325,155 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div
-        className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-hidden"
-        style={{ background: C_CARD, borderColor: C_NIGHT, color: C_OFFEE }}
-      >
+    <>
+      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
         <div
-          className="px-5 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: C_NIGHT, background: C_NIGHT , color:"white" }}
+          className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-hidden"
+          style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
         >
-          <div className="text-lg font-semibold">Claim Details</div>
-          <button
-            className="px-3 py-1 rounded border"
-            style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
-            onClick={onClose}
-            ref={firstBtnRef}
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="space-y-2">
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>User</span><div className="font-medium">{displayUserName(claim)}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Email</span><div className="font-medium">{displayUserEmail(claim)}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Designation</span><div className="font-medium">{displayDesignation(claim)}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Title</span><div className="font-medium">{claim.title || "—"}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Type</span><div className="font-medium">{claim.claimType || "—"}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Amount (cents)</span><div className="font-medium">{amountCents}</div></div>
-            <div><span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Submitted</span><div className="font-medium">{submittedAt}</div></div>
-            {claim.description && (
-              <div>
-                <span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Claim description</span>
-                <div className="whitespace-pre-wrap text-sm">{claim.description}</div>
-              </div>
-            )}
-            {isRejected && adminComment !== "—" && (
-              <div>
-                <span className="text-xs" style={{ color: `${C_OFFEE}99` }}>Admin comment</span>
-                <div className="whitespace-pre-wrap text-sm" style={{ color: "#b91c1c" }}>{adminComment}</div>
-              </div>
-            )}
-          </div>
-
-          <div className="border rounded-lg overflow-hidden">
-            <div
-              className="px-3 py-2 text-sm border-b"
-              style={{ borderColor: C_LINEN, background: C_NIGHT ,color: "white" }}
-            >
-              Receipt
-            </div>
-            <div
-              className="p-3 min-h-64 flex items-center justify-center"
-              style={{ background: C_EGGSHELL }}
-            >
-              {!preview.has && <div className="text-sm" style={{ color: `${C_OFFEE}99` }}>No receipt uploaded.</div>}
-              {preview.has && preview.supported && (
-                preview.contentType.includes("pdf")
-                  ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-96 border-0" />
-                  : <img src={preview.url} alt="Receipt" className="max-h-96 object-contain" />
-              )}
-              {preview.has && !preview.supported && (
-                <div className="text-center">
-                  <div className="text-sm mb-3" style={{ color: `${C_OFFEE}99` }}>
-                    Preview not supported for this file type
-                    <span className="block text-xs mt-1">({preview.contentType || "unknown"})</span>
-                  </div>
-                  <button
-                    onClick={downloadUnsupported}
-                    className="px-3 py-2 rounded"
-                    style={{ background: C_COCOA, color: C_EGGSHELL }}
-                  >
-                    Download file
-                  </button>
-                </div>
-              )}
-            </div>
-            <div
-              className="px-3 py-2 text-xs border-t"
-              style={{ color: `${C_OFFEE}99`, borderColor: C_LINEN, background: C_CARD }}
-            >
-              {preview.supported ? "View-only preview is shown; downloading is not offered here."
-                                 : "Preview unavailable. A download option is provided."}
-            </div>
-          </div>
-        </div>
-
-        {canAct ? (
           <div
-            className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-            style={{ borderColor: C_LINEN, background: C_CARD }}
+            className="px-5 py-4 border-b flex items-center justify-between"
+            style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
           >
-            <div className="flex-1">
-              <label className="text-sm" style={{ color: `${C_OFFEE}CC` }}>Reject reason (required to reject)</label>
-              <textarea
-                rows={2}
-                value={rejectComment}
-                onChange={(e) => { setRejectComment(e.target.value); if (rejectNeedsComment && e.target.value.trim()) setRejectNeedsComment(false); }}
-                className="w-full mt-1 p-2 rounded border"
-                style={{ background: C_EGGSHELL, borderColor: C_LINEN, color: C_OFFEE }}
-                placeholder="Explain why this claim is rejected"
-              />
-              {rejectNeedsComment && !rejectComment.trim() && (
-                <div className="text-xs mt-1" style={{ color: "#b91c1c" }}>Comment is required to reject.</div>
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                className="px-4 py-2 rounded border"
-                style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: C_OFFEE }}
-                onClick={onClose}
-                disabled={submitting}
-              >
-                Close
-              </button>
-              <button
-                className="px-4 py-2 rounded text-white disabled:opacity-50"
-                style={{ background: C_COCOA }}
-                onClick={() => setConfirm({ open: true, kind: "approve" })}
-                disabled={submitting}
-              >
-                Approve
-              </button>
-              <button
-                className="px-4 py-2 rounded text-white disabled:opacity-50"
-                style={{ background: C_TAUPE }}
-                onClick={() => {
-                  const comment = (rejectComment || "").trim();
-                  if (!comment) { setRejectNeedsComment(true); toast("Need comments", { type: "warning" }); return; }
-                  setConfirm({ open: true, kind: "reject" });
-                }}
-                disabled={submitting}
-              >
-                Reject
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="px-5 py-4 border-t flex justify-end"
-            style={{ borderColor: C_NIGHT, background: C_CARD }}
-          >
+            <div className="text-lg font-semibold">Claim Details</div>
             <button
-              className="px-4 py-2 rounded border"
-              style={{ borderColor: C_LINEN, background: C_EGGSHELL, color: C_OFFEE }}
+              className="px-3 py-1 rounded border"
+              style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
               onClick={onClose}
+              ref={firstBtnRef}
             >
               Close
             </button>
           </div>
-        )}
+
+          <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>User</span><div className="font-medium">{displayUserName(claim)}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Email</span><div className="font-medium">{displayUserEmail(claim)}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Designation</span><div className="font-medium">{displayDesignation(claim)}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Title</span><div className="font-medium">{claim.title || "—"}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Type</span><div className="font-medium">{claim.claimType || "—"}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Amount</span><div className="font-medium">{amountStr}</div></div>
+              <div><span className="text-xs" style={{ color: `${FG}99` }}>Submitted</span><div className="font-medium">{submittedAt}</div></div>
+              {isRejected && adminComment !== "—" && (
+                <div>
+                  <span className="text-xs" style={{ color: `${FG}99` }}>Admin comment</span>
+                  <div className="whitespace-pre-wrap text-sm" style={{ color: "#b91c1c" }}>{adminComment}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border rounded-lg overflow-hidden" style={{ borderColor: BORDER, borderWidth: 1 }}>
+              <div className="px-3 py-2 text-sm border-b" style={{ borderColor: BORDER, background: SURFACE, color: FG }}>
+                Receipt
+              </div>
+              <div className="p-3 min-h-64 flex items-center justify-center" style={{ background: C_EGGSHELL }}>
+                {!preview.has && <div className="text-sm" style={{ color: `${FG}99` }}>No receipt uploaded.</div>}
+                {preview.has && preview.supported && (
+                  preview.contentType.includes("pdf")
+                    ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-96 border-0" />
+                    : <img src={preview.url} alt="Receipt" className="max-h-96 object-contain" />
+                )}
+                {preview.has && !preview.supported && (
+                  <div className="text-center">
+                    <div className="text-sm mb-3" style={{ color: `${FG}99` }}>
+                      Preview not supported for this file type
+                      <span className="block text-xs mt-1">({preview.contentType || "unknown"})</span>
+                    </div>
+                    <button onClick={downloadUnsupported} className="px-3 py-2 rounded" style={{ background: PRI, color: PRI_FG }}>
+                      Download file
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="px-3 py-2 flex items-center justify-between border-t" style={{ color: `${FG}99`, borderColor: BORDER }}>
+                <div>{preview.supported ? "View-only preview shown. Expand for fullscreen." : "Preview unavailable; download provided."}</div>
+                {preview.has && preview.supported && (
+                  <button className="px-3 py-1.5 rounded" style={{ background: PRI, color: PRI_FG }} onClick={() => setFull(true)}>
+                    Expand
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {canAct ? (
+            <div className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                 style={{ borderColor: BORDER, background: SURFACE }}>
+              <div className="flex-1">
+                <label className="text-sm" style={{ color: `${FG}CC` }}>Reject reason (required to reject)</label>
+                <textarea
+                  rows={2}
+                  value={rejectComment}
+                  onChange={(e) => { setRejectComment(e.target.value); if (rejectNeedsComment && e.target.value.trim()) setRejectNeedsComment(false); }}
+                  className="w-full mt-1 p-2 rounded border"
+                  style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}
+                  placeholder="Explain why this claim is rejected"
+                />
+                {rejectNeedsComment && !rejectComment.trim() && (
+                  <div className="text-xs mt-1" style={{ color: "#b91c1c" }}>Comment is required to reject.</div>
+                )}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button className="px-4 py-2 rounded border"
+                        style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+                        onClick={onClose}
+                        disabled={submitting}>
+                  Close
+                </button>
+                <button className="px-4 py-2 rounded" style={{ background: PRI, color: PRI_FG }}
+                        onClick={() => setConfirm({ open: true, kind: "approve" })}
+                        disabled={submitting}>
+                  Approve
+                </button>
+                <button className="px-4 py-2 rounded" style={{ background: C_TAUPE, color: PRI_FG }}
+                        onClick={() => {
+                          const comment = (rejectComment || "").trim();
+                          if (!comment) { setRejectNeedsComment(true); toast("Need comments", { type: "warning" }); return; }
+                          setConfirm({ open: true, kind: "reject" });
+                        }}
+                        disabled={submitting}>
+                  Reject
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="px-5 py-4 border-t flex justify-end" style={{ borderColor: BORDER, background: SURFACE }}>
+              <button className="px-4 py-2 rounded border"
+                      style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+                      onClick={onClose}>
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+
+        <ConfirmToast
+          open={confirm.open}
+          kind={confirm.kind}
+          comment={(rejectComment || "").trim()}
+          onCancel={() => setConfirm({ open: false, kind: null })}
+          onConfirm={confirm.kind === "approve" ? confirmAndApprove : confirmAndReject}
+        />
       </div>
 
-      {/* Toast-style confirm (centered) */}
-      <ConfirmToast
-        open={confirm.open}
-        kind={confirm.kind}
-        comment={(rejectComment || "").trim()}
-        onCancel={() => setConfirm({ open: false, kind: null })}
-        onConfirm={confirm.kind === "approve" ? confirmAndApprove : confirmAndReject}
-      />
-    </div>
+      <FullscreenPreview open={full} onClose={() => setFull(false)} preview={preview} />
+    </>
   );
 }
 
+/* ========================= Page ========================= */
 export default function AdminDashboard() {
   const token = getAuth();
-  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  // Filters (global)
+  const [from, setFrom] = useState(""); // default empty = no lower bound
+  const [to, setTo] = useState("");     // default empty = no upper bound
+  const [status, setStatus] = useState(""); // export-only status; table uses tabs
+  const [email, setEmail] = useState("");
+  const [emailOptions, setEmailOptions] = useState([]);
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
 
   // Table state
   const [statusTab, setStatusTab] = useState("PENDING");
@@ -427,72 +482,207 @@ export default function AdminDashboard() {
   const [pageCount, setPageCount] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // Details modal
+  // KPIs
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [kpiSums, setKpiSums] = useState({ INR: 0, MYR: 0 });
+
+  // Detail modal
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailClaim, setDetailClaim] = useState(null);
 
-  // Export panel
-  const today = new Date().toISOString().slice(0,10);
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
-  const [status, setStatus] = useState("");
+  // Loading/Error
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [format, setFormat] = useState("xlsx");
 
-  const buildUrl = (tpl, id) => tpl.replace(":id", String(id));
-
-  async function fetchCounts() {
-    const [approvedPage, rejectedPage, pendingPage] = await Promise.all([
-      http("GET", `${ENDPOINTS.approved}?page=0&size=1`, { token }),
-      http("GET", `${ENDPOINTS.rejected}?page=0&size=1`, { token }),
-      http("GET", `${ENDPOINTS.pending}?page=0&size=1`, { token }),
-    ]);
-    const totalOf = (x) => x?.totalElements ?? x?.page?.totalElements ?? (Array.isArray(x) ? x.length : 0);
-    setCounts({
-      approved: totalOf(approvedPage),
-      rejected: totalOf(rejectedPage),
-      pending:  totalOf(pendingPage),
+  /* Build query params for list/export */
+  const buildParams = (extra = {}) => {
+    const params = new URLSearchParams({
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...extra,
     });
+    if (email) EMAIL_PARAM_KEYS.forEach((k) => params.set(k, email));
+    return params;
+  };
+
+  /* ===== KPIs: counts + currency totals honoring filters (Year/Month/From/To/Email) ===== */
+  async function fetchKpis() {
+    const statuses = ["PENDING","APPROVED","REJECTED"];
+    const countsAcc = { pending: 0, approved: 0, rejected: 0 };
+    const sums = { INR: 0, MYR: 0 };
+    const PAGE_SIZE_FOR_KPI = 200;
+
+    for (const s of statuses) {
+      const endpoint = STATUS_TO_ENDPOINT[s];
+      let pageIdx = 0;
+      let totalPages = 1;
+
+      do {
+        const params = new URLSearchParams({
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+          page: String(pageIdx),
+          size: String(PAGE_SIZE_FOR_KPI),
+        });
+        if (email) EMAIL_PARAM_KEYS.forEach((k) => params.set(k, email));
+
+        const data = await http("GET", `${endpoint}?${params.toString()}`, { token });
+        const content = Array.isArray(data) ? data : (data?.content ?? []);
+
+        // extra safety: client-filter date/email if server ignores
+        const filtered = content.filter((row) => {
+          const emailOk = email ? (displayUserEmail(row) || "").toLowerCase() === email.toLowerCase() : true;
+          const created = row.createdAt ?? row.created_at ?? row.submittedAt ?? row.submitted_at;
+          const dateOk = withinRange(created, from, to);
+          return emailOk && dateOk;
+        });
+
+        const inc = filtered.length;
+        if (s === "PENDING") countsAcc.pending += inc;
+        else if (s === "APPROVED") countsAcc.approved += inc;
+        else countsAcc.rejected += inc;
+
+        for (const r of filtered) {
+          const cur = (currencyOfClaim(r) || "").toUpperCase();
+          const cents = centsFromClaim(r);
+          if (cur === "INR") sums.INR += cents;
+          else if (cur === "MYR") sums.MYR += cents;
+        }
+
+        totalPages = data?.totalPages ?? (content.length < PAGE_SIZE_FOR_KPI ? pageIdx + 1 : pageIdx + 2);
+        pageIdx += 1;
+        if (pageIdx > 50) break; // cap
+      } while (pageIdx < totalPages);
+    }
+
+    setCounts(countsAcc);
+    setKpiSums(sums);
   }
 
+  /* Table list with server query + client fallback filter */
   async function fetchList(currentStatus = statusTab, currentPage = 1) {
     const endpoint = STATUS_TO_ENDPOINT[currentStatus] || ENDPOINTS.pending;
-    const data = await http("GET", `${endpoint}?page=${currentPage - 1}&size=10`, { token });
+
+    const params = buildParams({ page: currentPage - 1, size: PAGE_SIZE });
+    const data = await http("GET", `${endpoint}?${params.toString()}`, { token });
     const content = Array.isArray(data) ? data : (data?.content ?? []);
-    setRows(content);
-    setPageCount(data?.totalPages ?? 1);
-    setTotal(data?.totalElements ?? content.length);
-    if (content.length > 0 && currentPage === 1) console.log(`[admin] sample row (${currentStatus}) →`, content[0]);
+
+    const filtered = content.filter((row) => {
+      const emailOk = email ? (displayUserEmail(row) || "").toLowerCase() === email.toLowerCase() : true;
+      const created = row.createdAt ?? row.created_at ?? row.submittedAt ?? row.submitted_at;
+      const dateOk = withinRange(created, from, to);
+      return emailOk && dateOk;
+    });
+
+    setRows(filtered);
+
+    const serverTotal = data?.totalElements ?? content.length;
+    const effectiveTotal = email || from || to ? filtered.length : serverTotal;
+    setTotal(effectiveTotal);
+    setPageCount(Math.max(1, Math.ceil(effectiveTotal / PAGE_SIZE)));
+
+    const fromRows = content
+      .map((c) => ({ email: displayUserEmail(c), name: displayUserName(c) }))
+      .filter((x) => x.email && EMAIL_RE.test(x.email));
+    setEmailOptions((prev) => mergeEmails(prev, fromRows));
   }
 
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!token) { setError("Not authenticated. Please sign in as an admin."); toast("Admin auth required", { type: "error" }); return; }
-        await fetchCounts();
-        await fetchList("PENDING", 1);
-      } catch (e) {
-        setError(e.message || String(e));
-        toast(e.message || "Failed to load", { type: "error" });
-      } finally {
-        setLoading(false);
+  /* Collect more emails across statuses/pages to populate dropdown better */
+  async function hydrateEmailOptions() {
+    try {
+      const statuses = STATUS_OPTIONS;
+      const merged = [];
+      for (const s of statuses) {
+        const endpoint = STATUS_TO_ENDPOINT[s];
+        for (let p = 0; p < 3; p++) {
+          const params = buildParams({ page: p, size: 50 });
+          const data = await http("GET", `${endpoint}?${params.toString()}`, { token });
+          const content = Array.isArray(data) ? data : (data?.content ?? []);
+          for (const c of content) {
+            const email = displayUserEmail(c);
+            const name = displayUserName(c);
+            if (email && EMAIL_RE.test(email)) merged.push({ email, name });
+          }
+          const totalPages = data?.totalPages ?? 1;
+          if (p + 1 >= totalPages) break;
+        }
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function onChangeStatusTab(next) {
-    setStatusTab(next);
-    setPage(1);
-    setLoading(true);
-    try { await fetchList(next, 1); }
-    catch (e) { setError(e.message || String(e)); toast(e.message || "Failed to load", { type: "error" }); }
-    finally { setLoading(false); }
+      setEmailOptions((prev) => mergeEmails(prev, merged));
+    } catch {
+      /* best-effort; ignore */
+    }
   }
 
+  /* Download — if email selected, guarantee filtered data via client-side CSV */
+  async function runExport() {
+    try {
+      if (email) {
+        const statuses = status ? [status] : STATUS_OPTIONS;
+        const all = [];
+        for (const s of statuses) {
+          const endpoint = STATUS_TO_ENDPOINT[s];
+          let p = 0;
+          let totalPages = 1;
+          do {
+            const params = buildParams({ page: p, size: 100 });
+            const data = await http("GET", `${endpoint}?${params.toString()}`, { token });
+            const content = Array.isArray(data) ? data : (data?.content ?? []);
+            for (const r of content) {
+              const e = (displayUserEmail(r) || "").toLowerCase();
+              if (e !== email.toLowerCase()) continue;
+              const created = r.createdAt ?? r.created_at ?? r.submittedAt ?? r.submitted_at;
+              if (!withinRange(created, from, to)) continue;
+              all.push(r);
+            }
+            totalPages = data?.totalPages ?? 1;
+            p++;
+          } while (p < totalPages);
+        }
+
+        const lines = [
+          ["User Name","Email","Designation","Title","Amount","Status","Created At"].join(",")
+        ];
+        for (const r of all) {
+          const row = [
+            displayUserName(r),
+            displayUserEmail(r),
+            displayDesignation(r),
+            r.title ?? "",
+            String(centsFromClaim(r)),
+            r.status ?? "",
+            (r.createdAt ?? r.created_at ?? "").toString(),
+          ].map(v => `"${String(v ?? "").replace(/"/g,'""')}"`);
+          lines.push(row.join(","));
+        }
+        const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+        const name = `claims_${from || "all"}_to_${to || "all"}${status ? `_${status.toLowerCase()}` : ""}_${email.replace(/[@.]/g,"-")}.csv`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        toast(`Downloaded ${all.length} row(s) for ${email}`, { type: "success" });
+        return;
+      }
+
+      // No email filter → use server export as-is
+      const params = buildParams({ format, ...(status ? { status } : {}) });
+      const name = `claims_${from || "all"}_to_${to || "all"}${status ? `_${status.toLowerCase()}` : ""}.` + format;
+      await downloadToDisk(`${ENDPOINTS.adminExport}?${params.toString()}`, name);
+      toast("Download started", { type: "success" });
+    } catch (e) {
+      setError(e.message || String(e));
+      toast(e.message || "Download failed", { type: "error" });
+    }
+  }
+
+  /* Approve/Reject */
+  const buildUrl = (tpl, id) => tpl.replace(":id", String(id));
   async function doApprove(claim) {
     try {
       await http("PATCH", buildUrl(ENDPOINTS.approveTpl, claim.id), { token });
-      await Promise.all([fetchCounts(), fetchList(statusTab, page)]);
+      await Promise.all([fetchKpis(), fetchList(statusTab, page)]);
       toast("Approved successfully", { type: "success" });
       setDetailOpen(false); setDetailClaim(null);
     } catch (e) {
@@ -503,7 +693,7 @@ export default function AdminDashboard() {
   async function doReject(claim, comment) {
     try {
       await http("PATCH", buildUrl(ENDPOINTS.rejectTpl, claim.id), { token, body: { adminComment: comment } });
-      await Promise.all([fetchCounts(), fetchList(statusTab, page)]);
+      await Promise.all([fetchKpis(), fetchList(statusTab, page)]);
       toast("Rejected successfully", { type: "success" });
       setDetailOpen(false); setDetailClaim(null);
     } catch (e) {
@@ -512,131 +702,198 @@ export default function AdminDashboard() {
     }
   }
 
-  async function runExport() {
-    try {
-      const qs = new URLSearchParams({ from, to, format, ...(status ? { status } : {}) }).toString();
-      const name = `claims_${from}_to_${to}${status ? `_${status.toLowerCase()}` : ""}.${format}`;
-      await downloadToDisk(`${ENDPOINTS.adminExport}?${qs}`, name);
-      toast("Download started", { type: "success" });
-    } catch (e) {
-      setError(e.message || String(e));
-      toast(e.message || "Download failed", { type: "error" });
+  /* Initial load */
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!token) { setError("Not authenticated. Please sign in as an admin."); toast("Admin auth required", { type: "error" }); return; }
+        await fetchKpis();
+        await fetchList("PENDING", 1);
+        hydrateEmailOptions(); // best-effort to fill dropdown
+      } catch (e) {
+        setError(e.message || String(e));
+        toast(e.message || "Failed to load", { type: "error" });
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Global Year/Month -> snap From/To
+  useEffect(() => {
+    if (month && (year || new Date().getFullYear())) {
+      const y = year || String(new Date().getFullYear());
+      const { from: f, to: t } = monthBounds(y, month);
+      setFrom(f);
+      setTo(t);
+    } else {
+      // if either year/month cleared, don't constrain by month/year
+      // leave from/to as-is unless both cleared intentionally
     }
+  }, [month, year]);
+
+  // Refresh counts/table whenever filters change
+  useEffect(() => {
+    setPage(1);
+    setLoading(true);
+    (async () => {
+      try {
+        await Promise.all([fetchKpis(), fetchList(statusTab, 1)]);
+      } catch (e) {
+        setError(e.message || String(e));
+        toast(e.message || "Failed to load", { type: "error" });
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, from, to, statusTab]);
+
+  async function onChangeStatusTab(next) {
+    setStatusTab(next);
+    setPage(1);
+    setLoading(true);
+    try { await fetchList(next, 1); }
+    catch (e) { setError(e.message || String(e)); toast(e.message || "Failed to load", { type: "error" }); }
+    finally { setLoading(false); }
   }
 
-  const tableRows = useMemo(() => Array.isArray(rows) ? rows : [], [rows]);
   const headerLabel = statusTab[0] + statusTab.slice(1).toLowerCase();
+  const tableRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
 
-  // Column count for placeholders — base columns + Admin comment (only on Rejected)
-  // Base: User, Email, Designation, Title, Amount, Status, Actions
-  const COLS = 7 + (statusTab === "REJECTED" ? 1 : 0);
+  // UI data for year/month selectors
+  const currentYear = new Date().getFullYear();
+  const years = ["", ...Array.from({ length: 6 }, (_, i) => String(currentYear - i))];
+  const months = [
+    { v: "", n: "All" },
+    { v: "01", n: "Jan" }, { v: "02", n: "Feb" }, { v: "03", n: "Mar" },
+    { v: "04", n: "Apr" }, { v: "05", n: "May" }, { v: "06", n: "Jun" },
+    { v: "07", n: "Jul" }, { v: "08", n: "Aug" }, { v: "09", n: "Sep" },
+    { v: "10", n: "Oct" }, { v: "11", n: "Nov" }, { v: "12", n: "Dec" },
+  ];
 
   return (
-    // Keep wrapper simple so AppShell controls padding; align parallel to sidebar
-    <div className="space-y-6" style={{ color: C_OFFEE }}>
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" style={{ color: FG }}>
+      {/* Top bar with global Year/Month filters */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <h1 className="text-2xl font-semibold">Admin Claims</h1>
-        <button
-          onClick={() => { fetchCounts(); fetchList(statusTab, page); toast("Refreshed", { type: "info", duration: 1500 }); }}
-          className="px-3 py-2 rounded border"
-          style={{ borderColor: C_NIGHT, background: C_EGGSHELL, color: C_OFFEE }}
-        >
-          Refresh
-        </button>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col">
+            <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Year</label>
+            <select value={year} onChange={(e)=>setYear(e.target.value)}
+                    className="rounded px-2 py-1 border"
+                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
+              {years.map((y, i) => <option key={i} value={y}>{y || "All"}</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Month</label>
+            <select value={month} onChange={(e)=>setMonth(e.target.value)}
+                    className="rounded px-2 py-1 border"
+                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
+              {months.map((m) => <option key={m.v || "all"} value={m.v}>{m.n}</option>)}
+            </select>
+          </div>
+
+          <button
+            onClick={() => { fetchKpis(); fetchList(statusTab, page); toast("Refreshed", { type: "info", duration: 1500 }); }}
+            className="px-3 py-2 rounded border"
+            style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div
-          className="p-3 rounded border text-sm"
-          style={{ background: "#fff1f2", color: "#b91c1c", borderColor: "#fecaca" }}
-        >
+        <div className="p-3 rounded border text-sm"
+             style={{ background: "#fff1f2", color: "#b91c1c", borderColor: "#fecaca", borderWidth: 1 }}>
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* KPIs (filtered) incl. totals per currency — hide a currency if zero */}
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         <Kpi label="Pending"  value={counts.pending} />
         <Kpi label="Approved" value={counts.approved} />
         <Kpi label="Rejected" value={counts.rejected} />
+        {kpiSums.INR > 0 && <Kpi label="Total (INR)" value={formatCents(kpiSums.INR, "INR")} />}
+        {kpiSums.MYR > 0 && <Kpi label="Total (MYR)" value={formatCents(kpiSums.MYR, "MYR")} />}
       </div>
 
-      {/* Export Panel */}
-      <div
-        className="flex flex-wrap items-end gap-3 p-3 border rounded-2xl"
-        style={{ background: C_CARD, borderColor: C_NIGHT }}
-      >
+      {/* Export & Filters (no Year/Month here) */}
+      <div className="flex flex-wrap items-end gap-3 p-3 border rounded-2xl"
+           style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1 }}>
         <div className="flex flex-col">
-          <label className="text-sm mb-1" style={{ color: `${C_OFFEE}CC` }}>From</label>
-          <input
-            type="date"
-            value={from}
-            onChange={(e)=>setFrom(e.target.value)}
-            className="rounded px-2 py-1 border"
-            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
-          />
+          <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>From</label>
+          <input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}
+                 className="rounded px-2 py-1 border"
+                 style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }} />
         </div>
         <div className="flex flex-col">
-          <label className="text-sm mb-1" style={{ color: `${C_OFFEE}CC` }}>To</label>
-          <input
-            type="date"
-            value={to}
-            onChange={(e)=>setTo(e.target.value)}
-            className="rounded px-2 py-1 border"
-            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
-          />
+          <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>To</label>
+          <input type="date" value={to} onChange={(e)=>setTo(e.target.value)}
+                 className="rounded px-2 py-1 border"
+                 style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }} />
         </div>
+
+        <div className="flex flex-col min-w-[260px]">
+          <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Email (optional)</label>
+          <select value={email} onChange={(e)=>setEmail(e.target.value)}
+                  className="rounded px-2 py-1 border"
+                  style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
+            <option value="">All users</option>
+            {emailOptions.map((opt) => (
+              <option key={opt.email} value={opt.email}>
+                {opt.name ? `${opt.name} <${opt.email}>` : opt.email}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="flex flex-col">
-          <label className="text-sm mb-1" style={{ color: `${C_OFFEE}CC` }}>Status (optional)</label>
-          <select
-            value={status}
-            onChange={(e)=>setStatus(e.target.value)}
-            className="rounded px-2 py-1 border"
-            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
-          >
+          <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Status (optional)</label>
+          <select value={status} onChange={(e)=>setStatus(e.target.value)}
+                  className="rounded px-2 py-1 border"
+                  style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
             <option value="">All</option>
             <option value="PENDING">Pending</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
           </select>
         </div>
+
         <div className="flex flex-col">
-          <label className="text-sm mb-1" style={{ color: `${C_OFFEE}CC` }}>Format</label>
-          <select
-            value={format}
-            onChange={(e)=>setFormat(e.target.value)}
-            className="rounded px-2 py-1 border"
-            style={{ background: C_CLOUD, borderColor: C_NIGHT, color: C_OFFEE }}
-          >
+          <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Format</label>
+          <select value={format} onChange={(e)=>setFormat(e.target.value)}
+                  className="rounded px-2 py-1 border"
+                  style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
             <option value="xlsx">Excel (.xlsx)</option>
             <option value="pdf">PDF (.pdf)</option>
           </select>
         </div>
-        <button
-          onClick={runExport}
-          className="px-4 py-2 rounded text-white"
-          style={{ background: C_NIGHT }}
-        >
+
+        <button onClick={runExport} className="px-4 py-2 rounded" style={{ background: PRI, color: PRI_FG }}>
           Download
         </button>
       </div>
 
-      {/* Unified table with status dropdown */}
-      <div
-        className="rounded-2xl border overflow-hidden"
-        style={{ background: C_CARD, borderColor: C_NIGHT }}
-      >
-        <div
-          className="px-4 py-3 border-b text-sm flex items-center justify-between gap-2"
-          style={{ background: C_NIGHT, borderColor: C_NIGHT, color: "white" }}
-        >
+      {/* Table */}
+      <div className="rounded-2xl border overflow-hidden"
+           style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1 }}>
+        <div className="px-4 py-3 border-b text-sm flex items-center justify-between gap-2"
+             style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}>
           <div>
             {headerLabel} Claims (page {page} of {pageCount}) — total {total}
           </div>
           <div className="flex items-center gap-2">
-            <span style={{ color: "white" }}>View:</span>
+            <span>View:</span>
             <select
               className="rounded px-2 py-1 border"
-              style={{ background: C_EGGSHELL, borderColor: C_NIGHT, color: C_OFFEE }}
+              style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}
               value={statusTab}
               onChange={(e) => onChangeStatusTab(e.target.value)}
             >
@@ -648,9 +905,9 @@ export default function AdminDashboard() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm" style={{ color: "white" }}>
+          <table className="min-w-full text-sm" style={{ color: FG }}>
             <thead>
-              <tr style={{ background: C_NIGHT, color: "white" }}>
+              <tr style={{ background: SURFACE, color: FG }}>
                 <th className="px-4 py-2 text-left">User Name</th>
                 <th className="px-4 py-2 text-left">Email</th>
                 <th className="px-4 py-2 text-left">Designation</th>
@@ -665,35 +922,32 @@ export default function AdminDashboard() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={COLS} className="px-4 py-8 text-center" style={{ color: `${C_OFFEE}99` }}>Loading…</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: `${FG}99` }}>Loading…</td></tr>
               ) : tableRows.length === 0 ? (
-                <tr><td colSpan={COLS} className="px-4 py-8 text-center" style={{ color: `${C_OFFEE}99` }}>No data</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: `${FG}99` }}>No data</td></tr>
               ) : tableRows.map((c) => (
-                <tr key={c.id} className="border-t" style={{ borderColor: C_NIGHT  , color:C_NIGHT}}>
+                <tr key={c.id} className="border-t" style={{ borderColor: BORDER }}>
                   <td className="px-4 py-2">{displayUserName(c)}</td>
                   <td className="px-4 py-2" title={displayUserEmail(c)}>{displayUserEmail(c)}</td>
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
                   <td className="px-4 py-2">{c.title}</td>
-                  <td className="px-4 py-2">{formatCents(centsFromClaim(c))}</td>
+                  {/* amount in claim's currency (INR/MYR), no decimals */}
+                  <td className="px-4 py-2">{formatCentsForClaim(c)}</td>
                   <td className="px-4 py-2">{c.status}</td>
-
                   {statusTab === "REJECTED" && (
-                    <td
-                      className="px-4 py-2 max-w-[360px] truncate"
-                      style={{ color: "#b91c1c" }}
-                      title={firstNonEmpty(c.adminComment, c.admin_comment) || ""}
-                    >
+                    <td className="px-4 py-2 max-w-[360px] truncate" style={{ color: "#b91c1c" }}
+                        title={firstNonEmpty(c.adminComment, c.admin_comment) || ""}>
                       {firstNonEmpty(c.adminComment, c.admin_comment) || "—"}
                     </td>
                   )}
-
                   <td className="px-4 py-2 text-right">
                     <button
                       className="px-3 py-1 rounded"
-                      style={{ background: C_NIGHT, color: C_EGGSHELL }}
+                      style={{ background: PRI, color: PRI_FG }}
                       onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
+                      title="Open details & fullscreen preview"
                     >
-                      View more
+                      Expand
                     </button>
                   </td>
                 </tr>
@@ -702,27 +956,23 @@ export default function AdminDashboard() {
           </table>
         </div>
 
-        <div
-          className="px-4 py-3 border-t"
-          style={{ background: C_NIGHT, borderColor: C_NIGHT , color:"white"}}
-        >
+        {/* Pager */}
+        <div className="px-4 py-3 border-t" style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1 }}>
           <div className="flex items-center justify-between">
             <div />
             <div>
               <button
                 className="px-3 py-1 rounded border mr-2 disabled:opacity-50"
-                style={{ borderColor: C_LINEN, background: C_NIGHT, color: "white" }}
+                style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
                 onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page <= 1}
               >
                 Prev
               </button>
-              <span className="text-sm" style={{ color: "white" }}>
-                Page {page} / {pageCount}
-              </span>
+              <span className="text-sm">Page {page} / {pageCount}</span>
               <button
                 className="px-3 py-1 rounded border ml-2 disabled:opacity-50"
-                style={{ borderColor: C_LINEN, background: C_NIGHT, color: C_CLOUD }}
+                style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
                 onClick={() => { const p = Math.min(pageCount, page + 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page >= pageCount}
               >

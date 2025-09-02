@@ -1,39 +1,33 @@
 package com.rms.reimbursement_app.dto;
 
+import com.rms.reimbursement_app.domain.CurrencyCode;
 import jakarta.validation.constraints.*;
 
 public record SignupRequest(
-
-        @NotBlank
-        @Size(max = 30)
+        @NotBlank @Size(max = 30)
         String name,
 
-        @Email
-        @NotBlank
-        @Size(max = 190)
+        @Email @NotBlank @Size(max = 190)
         String email,
 
-        @NotBlank
-        @Size(min = 8, max = 100)
+        @NotBlank @Size(min = 8, max = 100)
         String password,
 
-        @NotBlank
-        @Size(max = 30)
+        @NotNull
+        CurrencyCode currencyCode,
+
+        @NotBlank @Size(max = 30)
         String department,
 
-        @NotBlank
-        @Size(max = 30)
+        @NotBlank @Size(max = 30)
         String designation,
 
-        @NotBlank
-        @Size(max = 100)
+        @NotBlank @Size(max = 100)
         String address,
 
-        @NotBlank
-        @Pattern(regexp = "\\d{10}", message = "contact must be exactly 10 digits")
+        @NotBlank @Pattern(regexp = "\\d{10}", message = "contact must be exactly 10 digits")
         String contact,
 
-        @NotBlank
-        @Pattern(regexp = "\\d{6}", message = "pincode must be exactly 6 digits")
+        @NotBlank @Pattern(regexp = "\\d{6}", message = "pincode must be exactly 6 digits")
         String pincode
 ) {}

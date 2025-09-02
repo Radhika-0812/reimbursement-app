@@ -1,5 +1,6 @@
 package com.rms.reimbursement_app.dto;
 
+import com.rms.reimbursement_app.domain.CurrencyCode;
 import com.rms.reimbursement_app.domain.User;
 
 public record UserProfileResponse(
