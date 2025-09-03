@@ -88,7 +88,6 @@ export default {
         lg: "var(--shadow-lg)",
         xl: "var(--shadow-xl)",
         "2xl": "var(--shadow-2xl)",
-        // legacy names (optional)
         soft: "0 10px 24px rgba(15, 46, 42, .12)",
         inset: "inset 0 1px 0 rgba(255,255,255,.25)",
       },
