@@ -5,15 +5,15 @@ services:
     image: postgres:16
     container_name: rms-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: reimbursedb
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: "RADhi@081215"   # quote because of special chars
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5433:5432"   # optional: expose DB for debugging
+      - "5433:5432"   # optional: expose DB for debugging with DBeaver/psql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U app -d reimbursedb"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -26,14 +26,16 @@ services:
       db:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: ${PROFILE}
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,mappings
+      SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8080
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      APP_SECURITY_JWT_HMAC-SECRET: ${JWT_SECRET}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/reimbursedb
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: "RADhi@081215"
+      APP_SECURITY_JWT_HMAC-SECRET: "MySuperSecretKey"   # replace with your actual JWT secret
       APP_SECURITY_JWT_ISSUER: rms-auth
       APP_SECURITY_JWT_EXPIRES-MIN: 60
+
     ports:
       - "8080:8080"   # expose backend on host
     restart: unless-stopped
