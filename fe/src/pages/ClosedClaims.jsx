@@ -6,6 +6,7 @@ import { toast } from "../lib/toast";
 import { centsFromClaim, formatCents, currencyOfClaim } from "../lib/money";
 import { useDateFilter } from "../state/DateFilterContext";
 import { MONTH_LABELS, getDateFromClaim, inYearMonth } from "../lib/dates";
+import RecallRespondDialog from "../components/RecallRespondDialog"; // 👈 user recall dialog
 
 // ---------- Config ----------
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -51,6 +52,12 @@ async function sniffMime(blob) {
 }
 // 👇 Use claim’s currency:
 const displayAmount = (c) => formatCents(centsFromClaim(c), currencyOfClaim(c));
+
+/* ---- Recall helpers (tolerant to API shapes) ---- */
+const hasRecall = (c) =>
+  c?.recallStatus === "REQUESTED" || c?.recallRequested === true || c?.needsMoreInfo === true;
+const recallReason = (c) => c?.recallReason || c?.recallComment || c?.recall_comment || "Additional information required.";
+const recallRequireAttachment = (c) => !!(c?.recallRequireAttachment || c?.recall_attachment_required);
 
 /* ---- Fullscreen viewer ---- */
 function FullscreenPreview({ open, preview, onClose }) {
@@ -145,6 +152,7 @@ export default function ClosedClaims() {
   const [page, setPage] = useState(1);
   const [openingId, setOpeningId] = useState(null);
   const [preview, setPreview] = useState({ open: false, url: "", contentType: "", filename: "", supported: false, claimId: null });
+  const [recallFor, setRecallFor] = useState(null); // 👈 respond modal
 
   const didInitRef = useRef(false);
   useEffect(() => {
@@ -271,6 +279,26 @@ export default function ClosedClaims() {
             <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Amount</div>
             <div className="font-semibold">{displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span></div>
           </div>
+
+          {/* Recall banner if requested */}
+          {hasRecall(c) && (
+            <div className="sm:col-span-3 rounded-md border px-3 py-2 mt-1"
+                 style={{ borderColor: "var(--border)", background: "var(--accent)" }}>
+              <div className="text-sm font-semibold">Recall requested by Admin</div>
+              <div className="text-xs mt-1" style={{ color: "color-mix(in oklch, var(--foreground) 70%, transparent)" }}>
+                {recallReason(c)}{recallRequireAttachment(c) ? " (Attachment required)" : ""}
+              </div>
+              <div className="mt-2">
+                <button
+                  onClick={() => setRecallFor(c)}
+                  className="text-sm px-3 py-1.5 rounded-md"
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                >
+                  Respond
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -331,6 +359,26 @@ export default function ClosedClaims() {
               </div>
             </div>
           )}
+
+          {/* Recall banner if requested */}
+          {hasRecall(c) && (
+            <div className="sm:col-span-2 rounded-md border px-3 py-2"
+                 style={{ borderColor: "var(--border)", background: "var(--accent)" }}>
+              <div className="text-sm font-semibold">Recall requested by Admin</div>
+              <div className="text-xs mt-1" style={{ color: "color-mix(in oklch, var(--foreground) 70%, transparent)" }}>
+                {recallReason(c)}{recallRequireAttachment(c) ? " (Attachment required)" : ""}
+              </div>
+              <div className="mt-2">
+                <button
+                  onClick={() => setRecallFor(c)}
+                  className="text-sm px-3 py-1.5 rounded-md"
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                >
+                  Respond
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -385,6 +433,15 @@ export default function ClosedClaims() {
         if (preview.url) URL.revokeObjectURL(preview.url);
         setPreview({ open:false, url:"", contentType:"", filename:"", supported:false, claimId:null });
       }} />
+
+      {/* Recall respond modal */}
+      <RecallRespondDialog
+        open={!!recallFor}
+        claim={recallFor}
+        requireAttachment={recallRequireAttachment(recallFor || {})}
+        onClose={() => setRecallFor(null)}
+        onDone={() => { toast("Response sent", { type: "success" }); setRecallFor(null); refresh?.(); }}
+      />
     </div>
   );
 }

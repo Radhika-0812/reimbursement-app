@@ -9,6 +9,7 @@ import {
   currencyOfClaim,
 } from "../lib/money";
 import { C_CHAR, C_STEEL } from "../theme/palette";
+import RecallDialog from "../components/RecallDialog"; // 👈 recall modal
 
 /* ===== Semantic colors ===== */
 const FG = "var(--foreground)";
@@ -308,7 +309,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
 
   if (!open || !claim) return null;
 
-  const amountStr = formatCentsForClaim(claim); // shows INR/MYR with integer amount
+  const amountStr = formatCentsForClaim(claim);
   const submittedAt = new Date(claim.createdAt ?? claim.created_at ?? Date.now()).toLocaleString();
   const isRejected = String(claim?.status).toUpperCase() === "REJECTED";
   const adminComment = firstNonEmpty(claim?.adminComment, claim?.admin_comment);
@@ -490,6 +491,9 @@ export default function AdminDashboard() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailClaim, setDetailClaim] = useState(null);
 
+  // Recall modal (admin)
+  const [recallClaim, setRecallClaim] = useState(null); // 👈
+
   // Loading/Error
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -507,7 +511,7 @@ export default function AdminDashboard() {
     return params;
   };
 
-  /* ===== KPIs: counts + currency totals honoring filters (Year/Month/From/To/Email) ===== */
+  /* ===== KPIs: counts + currency totals honoring filters ===== */
   async function fetchKpis() {
     const statuses = ["PENDING","APPROVED","REJECTED"];
     const countsAcc = { pending: 0, approved: 0, rejected: 0 };
@@ -531,7 +535,6 @@ export default function AdminDashboard() {
         const data = await http("GET", `${endpoint}?${params.toString()}`, { token });
         const content = Array.isArray(data) ? data : (data?.content ?? []);
 
-        // extra safety: client-filter date/email if server ignores
         const filtered = content.filter((row) => {
           const emailOk = email ? (displayUserEmail(row) || "").toLowerCase() === email.toLowerCase() : true;
           const created = row.createdAt ?? row.created_at ?? row.submittedAt ?? row.submitted_at;
@@ -729,7 +732,6 @@ export default function AdminDashboard() {
       setTo(t);
     } else {
       // if either year/month cleared, don't constrain by month/year
-      // leave from/to as-is unless both cleared intentionally
     }
   }, [month, year]);
 
@@ -941,14 +943,26 @@ export default function AdminDashboard() {
                     </td>
                   )}
                   <td className="px-4 py-2 text-right">
-                    <button
-                      className="px-3 py-1 rounded"
-                      style={{ background: PRI, color: PRI_FG }}
-                      onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
-                      title="Open details & fullscreen preview"
-                    >
-                      Expand
-                    </button>
+                    <div className="inline-flex gap-2">
+                      {(c.status === "APPROVED" || c.status === "REJECTED") && (
+                        <button
+                          className="px-3 py-1 rounded border"
+                          style={{ background: C_EGGSHELL, borderColor: BORDER, color: FG }}
+                          onClick={() => setRecallClaim(c)}
+                          title="Recall this claim from the user"
+                        >
+                          Recall
+                        </button>
+                      )}
+                      <button
+                        className="px-3 py-1 rounded"
+                        style={{ background: PRI, color: PRI_FG }}
+                        onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
+                        title="Open details & fullscreen preview"
+                      >
+                        Expand
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -991,6 +1005,14 @@ export default function AdminDashboard() {
         onClose={() => { setDetailOpen(false); setDetailClaim(null); }}
         onApprove={doApprove}
         onReject={doReject}
+      />
+
+      {/* Recall modal */}
+      <RecallDialog
+        open={!!recallClaim}
+        claim={recallClaim}
+        onClose={() => setRecallClaim(null)}
+        onDone={() => { fetchKpis(); fetchList(statusTab, page); }}
       />
     </div>
   );

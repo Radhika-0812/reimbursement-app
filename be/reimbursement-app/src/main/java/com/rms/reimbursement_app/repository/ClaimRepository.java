@@ -50,6 +50,8 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
            """)
     Optional<ClaimReceiptProjection> findReceiptById(@Param("id") Long id);
 
+    Optional<Claim> findByIdAndUser_Id(Long id, Long userId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
            update Claim c

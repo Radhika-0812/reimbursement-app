@@ -1,26 +1,30 @@
-
+# docker-compose.yml  (at the same folder as your Dockerfile)
 
 services:
   db:
-    image: postgres:16.3-alpine
+    image: postgres:15
     container_name: rms-db
     environment:
       POSTGRES_DB: reimbursedb
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: "RADhi@081215"   # quote because of special chars
+      POSTGRES_PASSWORD: "RADhi@081215"        # quoted due to special char
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5433:5432"   # optional: expose DB for debugging with DBeaver/psql
+      - "5433:5432"                             # optional: connect via localhost:5433
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d reimbursedb"]
+      test: ["CMD-SHELL", "pg_isready -U app -d reimbursedb || exit 1"]
       interval: 5s
-      timeout: 3s
-      retries: 10
+      timeout: 5s
+      retries: 30
+      start_period: 40s
     restart: unless-stopped
 
   app:
-    image: radhikas0812/reimbursement-app:v1
+    build:
+      context: .                                # folder containing the Dockerfile
+      dockerfile: Dockerfile
+
     container_name: rms-app
     depends_on:
       db:
@@ -32,12 +36,16 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/reimbursedb
       SPRING_DATASOURCE_USERNAME: app
       SPRING_DATASOURCE_PASSWORD: "RADhi@081215"
-      APP_SECURITY_JWT_HMAC-SECRET: "EmTAIbB2/tzdt798Ka6qtC6Epbm/nZespm2K+bRQ2kA="   # replace with your actual JWT secret
+      # Use underscores in env var names; Spring maps them to app.security.jwt.*
+      APP_SECURITY_JWT_HMAC_SECRET: "EmTAIbB2/tzdt798Ka6qtC6Epbm/nZespm2K+bRQ2kA="
       APP_SECURITY_JWT_ISSUER: rms-auth
-      APP_SECURITY_JWT_EXPIRES-MIN: 60
+      APP_SECURITY_JWT_EXPIRES_MIN: 60
+      SPRING_FLYWAY_LOCATIONS: classpath:db/migration
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
 
     ports:
-      - "8080:8080"   # expose backend on host
+      - "8080:8080"
     restart: unless-stopped
 
 volumes:

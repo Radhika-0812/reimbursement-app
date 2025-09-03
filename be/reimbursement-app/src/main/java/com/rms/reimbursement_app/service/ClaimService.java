@@ -1,6 +1,6 @@
+// src/main/java/com/rms/reimbursement_app/service/ClaimService.java
 package com.rms.reimbursement_app.service;
 
-import com.rms.reimbursement_app.domain.CurrencyCode;
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
@@ -16,8 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-
-
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -32,9 +30,9 @@ public class ClaimService {
     private final ClaimRepository repo;
 
     @PersistenceContext
-    private EntityManager em; // for flush + refresh (DB-populated columns)
+    private EntityManager em; // for flush + refresh
 
-    // ---- File constraints (adjust as needed) ----
+    // ---- File constraints ----
     private static final long MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
     private static final Set<String> ALLOWED_CT = Set.of(
             "image/jpeg", "image/png", "image/gif", "image/webp",
@@ -51,31 +49,41 @@ public class ClaimService {
     @Transactional
     public List<Claim> createBatch(Long userId, List<CreateClaimRequest> items) {
         if (items == null || items.isEmpty()) {
-            throw new IllegalArgumentException("No claims provided");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No claims provided");
         }
 
         var entities = items.stream().map(in -> {
+            if (in.getTitle() == null || in.getTitle().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required");
+            }
+
+            Long amountCents = in.getAmountCents(); // ✅ only this exists on DTO
+            if (amountCents == null || amountCents <= 0L) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountCents must be > 0");
+            }
+            if (in.getCurrencyCode() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "currencyCode is required");
+            }
+            if (in.getClaimType() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "claimType is required");
+            }
+
             var c = new Claim();
             c.setUserId(userId);
             c.setTitle(in.getTitle());
-            c.setAmountCents(in.getAmountCents());
+            c.setAmountCents(amountCents);
             c.setCurrencyCode(in.getCurrencyCode());
             c.setClaimType(in.getClaimType());
             c.setDescription(in.getDescription());
-            c.setReceiptUrl(in.getReceiptUrl()); // keep if you still use external URLs
+            c.setReceiptUrl(in.getReceiptUrl());
             c.setStatus(ClaimStatus.PENDING);
             c.setClaimDate(in.getClaimDate() != null ? in.getClaimDate() : LocalDate.now());
-
-
             return c;
         }).toList();
 
         var saved = repo.saveAll(entities);
-
-        // Ensure DB triggers/computed columns (e.g., user_name) are visible
         em.flush();
         saved.forEach(em::refresh);
-
         return saved;
     }
 
@@ -122,9 +130,9 @@ public class ClaimService {
 
     @Transactional
     public Claim approve(Long id) {
-        var c = repo.findById(id).orElseThrow();
+        var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
         if (c.getStatus() != ClaimStatus.PENDING) {
-            throw new IllegalStateException("Only pending can be approved");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending can be approved");
         }
         c.setStatus(ClaimStatus.APPROVED);
         return repo.save(c);
@@ -133,24 +141,84 @@ public class ClaimService {
     @Transactional
     public Claim reject(Long id, String comment) {
         if (comment == null || comment.isBlank()) {
-            throw new IllegalArgumentException("Admin comment required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin comment required");
         }
-        var c = repo.findById(id).orElseThrow();
+        var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
         if (c.getStatus() != ClaimStatus.PENDING) {
-            throw new IllegalStateException("Only pending can be rejected");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending can be rejected");
         }
         c.setStatus(ClaimStatus.REJECTED);
         c.setAdminComment(comment);
         return repo.save(c);
     }
 
+    // ===================== Recall Flow =====================
+
+    /** Admin starts recall: flag it and move claim into PENDING for re-review. */
+    @Transactional
+    public Claim adminStartRecall(Long id, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Recall reason required");
+        }
+        var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
+
+        // From APPROVED/REJECTED/PENDING → PENDING w/ recallActive
+        c.setRecallActive(true);
+        c.setRecallReason(reason.trim());
+        c.setResubmitComment(null);
+        c.setStatus(ClaimStatus.PENDING);
+        return repo.save(c);
+    }
+
+    /** Admin cancels recall: clear the flag. */
+    @Transactional
+    public Claim adminCancelRecall(Long id) {
+        var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
+        c.setRecallActive(false);
+        return repo.save(c);
+    }
+
+    /** User resubmits after recall. Optional file + comment. Leaves status=PENDING for admin to decide. */
+    @Transactional
+    public Claim resubmit(Long claimId, Long currentUserId, String resubmitComment, MultipartFile optionalFile)
+            throws IOException {
+
+        final Claim c = repo.findByIdAndUserId(claimId, currentUserId).orElseThrow(() -> {
+            boolean exists = repo.existsById(claimId);
+            return new ResponseStatusException(exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
+                    exists ? "Not your claim" : "Claim not found");
+        });
+
+        if (!Boolean.TRUE.equals(c.isRecallActive())) {
+            // If not in recall, just return as-is (or throw 409 if you prefer strict behavior)
+            return c;
+        }
+
+        if (optionalFile != null && !optionalFile.isEmpty()) {
+            assignAndValidateFile(c, optionalFile);
+        }
+        if (resubmitComment != null && !resubmitComment.isBlank()) {
+            c.setResubmitComment(resubmitComment.trim());
+        }
+
+        c.setRecallActive(false);
+        c.setStatus(ClaimStatus.PENDING);
+        return repo.save(c);
+    }
+
+    /** ✅ Alias so controllers that call resubmitAfterRecall(...) compile. */
+    @Transactional
+    public Claim resubmitAfterRecall(Long claimId, Long currentUserId, MultipartFile optionalFile, String resubmitComment)
+            throws IOException {
+        return resubmit(claimId, currentUserId, resubmitComment, optionalFile);
+    }
+
     // ===================== Receipt Upload / Download =====================
-    // Existing generic upload/download (kept for compatibility)
 
     @Transactional
     public Claim uploadReceipt(Long claimId, MultipartFile file) throws IOException {
         var claim = repo.findById(claimId)
-                .orElseThrow(() -> new IllegalArgumentException("Claim not found: " + claimId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found: " + claimId));
         assignAndValidateFile(claim, file);
         return repo.save(claim);
     }
@@ -158,9 +226,9 @@ public class ClaimService {
     @Transactional(readOnly = true)
     public FileData downloadReceipt(Long claimId) {
         var claim = repo.findById(claimId)
-                .orElseThrow(() -> new IllegalArgumentException("Claim not found: " + claimId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found: " + claimId));
         if (claim.getReceiptFile() == null) {
-            throw new IllegalStateException("No receipt uploaded for claim " + claimId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No receipt uploaded for claim " + claimId);
         }
         return new FileData(
                 claim.getReceiptFilename(),
@@ -169,9 +237,6 @@ public class ClaimService {
         );
     }
 
-    /**
-     * Owner-enforced upload: only the claim owner or ADMIN can upload/replace the receipt.
-     */
     @Transactional
     public Claim uploadReceiptForUser(Long claimId, Long currentUserId, boolean isAdmin, MultipartFile file)
             throws IOException {
@@ -189,9 +254,6 @@ public class ClaimService {
         return repo.save(claim);
     }
 
-    /**
-     * Owner-enforced download: only the claim owner or ADMIN can download the receipt.
-     */
     @Transactional(readOnly = true)
     public FileData downloadReceiptForUser(Long claimId, Long currentUserId, boolean isAdmin) {
         final Claim claim = isAdmin
@@ -214,6 +276,17 @@ public class ClaimService {
         );
     }
 
+    /** Simple existence probe if you wire a HEAD endpoint elsewhere. */
+    @Transactional(readOnly = true)
+    public boolean receiptExists(Long claimId) {
+        var c = repo.findById(claimId).orElse(null);
+        if (c == null) return false;
+        if (c.getReceiptSize() != null && c.getReceiptSize() > 0) return true;
+        if (c.getReceiptFile() != null && c.getReceiptFile().length > 0) return true;
+        if (c.getReceiptFilename() != null && !c.getReceiptFilename().isBlank()) return true;
+        return c.getReceiptUrl() != null && !c.getReceiptUrl().isBlank();
+    }
+
     // ===================== Helpers =====================
 
     private void assignAndValidateFile(Claim claim, MultipartFile file) throws IOException {
@@ -229,10 +302,10 @@ public class ClaimService {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "File too large (max %d bytes)".formatted(MAX_UPLOAD_BYTES));
         }
 
-        claim.setReceiptFile(file.getBytes());                 // bytea
+        claim.setReceiptFile(file.getBytes());
         claim.setReceiptFilename(file.getOriginalFilename());
         claim.setReceiptContentType(ct);
-        claim.setReceiptSize(file.getSize());                  // bigint
+        claim.setReceiptSize(file.getSize());
     }
 
     // Lightweight DTO for downloads

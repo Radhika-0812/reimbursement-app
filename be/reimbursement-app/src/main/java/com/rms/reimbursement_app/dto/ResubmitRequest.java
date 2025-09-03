@@ -1,4 +1,8 @@
+// src/main/java/com/rms/reimbursement_app/dto/ResubmitRequest.java
 package com.rms.reimbursement_app.dto;
 
-public class ResubmitRequest {
-}
+import jakarta.validation.constraints.NotBlank;
+
+public record ResubmitRequest(
+        @NotBlank String comment
+) {}

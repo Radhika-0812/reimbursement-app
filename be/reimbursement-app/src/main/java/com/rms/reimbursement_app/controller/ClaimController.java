@@ -1,3 +1,4 @@
+// src/main/java/com/rms/reimbursement_app/controller/ClaimController.java
 package com.rms.reimbursement_app.controller;
 
 import com.rms.reimbursement_app.domain.Claim;
@@ -6,6 +7,7 @@ import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.dto.PageDto;
 import com.rms.reimbursement_app.service.ClaimService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -79,6 +81,22 @@ public class ClaimController {
         return paginate(all, page, size);
     }
 
+    // ----------------------- NEW: Me: claims that are in recall -----------------------
+
+    /**
+     * Returns the current user's claims that have been recalled by admin.
+     * (Filters your pending list for recallActive=true.)
+     */
+    @GetMapping("/me/recall")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public List<ClaimResponse> myRecall(@AuthenticationPrincipal Jwt jwt) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        return service.myPending(userId).stream()
+                .filter(c -> Boolean.TRUE.equals(c.isRecallActive()))
+                .map(ClaimResponse::from)
+                .toList();
+    }
+
     // ----------------------- Receipt upload/download (owner-only; admin bypass) -----------------------
 
     /**
@@ -106,6 +124,22 @@ public class ClaimController {
     }
 
     /**
+     * HEAD probe for receipt existence (used by PendingClaims page).
+     * 200 if exists, 404 if not. Avoids loading the whole blob.
+     */
+    @RequestMapping(value = "/api/claims/{id}/receipt", method = RequestMethod.HEAD)
+    public ResponseEntity<Void> headReceipt(@PathVariable Long id,
+                                            @AuthenticationPrincipal Jwt jwt,
+                                            Authentication authentication) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        // Owner-only logic is enforced inside service.downloadReceiptForUser; for HEAD we can cheaply check:
+        boolean exists = service.receiptExists(id);
+        return exists ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    /**
      * Download the stored receipt (owner-only unless ADMIN).
      */
     @GetMapping("/{id}/receipt")
@@ -117,7 +151,6 @@ public class ClaimController {
         boolean isAdmin = authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
 
-        // Service should enforce owner/admin before returning file
         var fileData = service.downloadReceiptForUser(id, userId, isAdmin);
 
         HttpHeaders headers = new HttpHeaders();
@@ -126,6 +159,39 @@ public class ClaimController {
         headers.setContentLength(fileData.bytes().length);
 
         return new ResponseEntity<>(fileData.bytes(), headers, HttpStatus.OK);
+    }
+
+    // ----------------------- Resubmit after recall -----------------------
+
+    /**
+     * JSON resubmit (no file). Use when admin recall didn't require an attachment,
+     * or the existing receipt is still valid.
+     *
+     * Body: { "comment": "Added taxi bill number to description" }
+     */
+    @PatchMapping(path = "/{id}/resubmit", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ClaimResponse resubmitJson(@PathVariable Long id,
+                                      @AuthenticationPrincipal Jwt jwt,
+                                      @Valid @RequestBody ResubmitRequest req) throws Exception {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        var updated = service.resubmitAfterRecall(id, userId, null, req.comment());
+        return ClaimResponse.from(updated);
+    }
+
+    /**
+     * Multipart resubmit with (optional) new receipt file + comment.
+     * Use field name "file" for the new receipt, and "comment" for text.
+     */
+    @PatchMapping(path = "/{id}/resubmit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ClaimResponse resubmitMultipart(@PathVariable Long id,
+                                           @AuthenticationPrincipal Jwt jwt,
+                                           @RequestPart(name = "file", required = false) MultipartFile file,
+                                           @RequestPart(name = "comment", required = false) String comment) throws Exception {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        var updated = service.resubmitAfterRecall(id, userId, file, comment);
+        return ClaimResponse.from(updated);
     }
 
     // ----------------------- Helpers -----------------------
@@ -143,4 +209,7 @@ public class ClaimController {
 
     // Small response payload for upload endpoint
     public record UploadResponse(Long claimId, String filename, String contentType, Long size) {}
+
+    // JSON request for resubmit
+    public record ResubmitRequest(@Size(max = 2000) String comment) {}
 }

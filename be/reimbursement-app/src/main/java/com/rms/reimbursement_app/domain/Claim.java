@@ -8,10 +8,6 @@ import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -37,10 +33,9 @@ public class Claim {
     @Column(nullable = false, length = 140)
     private String title;
 
-    // 👇 NEW — date user is claiming for (not createdAt)
+    // 👇 date user is claiming for (not createdAt)
     @Column(name = "claim_date")
     private LocalDate claimDate;
-
 
     // store amounts in cents/paise
     @Column(nullable = false)
@@ -83,6 +78,28 @@ public class Claim {
     @Column(columnDefinition = "text")
     private String adminComment;
 
+    /* ===== Recall fields ===== */
+    @Column(nullable = false)
+    private boolean recallActive = false;
+
+    @Column(length = 2000)
+    private String recallReason;
+
+    // If admin requires an attachment before resubmitting
+    @Column(name = "recall_require_attachment", nullable = false)
+    private boolean recallRequireAttachment = false;
+
+    // Timestamps for auditability
+    @Column(name = "recalled_at")
+    private Instant recalledAt;
+
+    @Column(name = "resubmitted_at")
+    private Instant resubmittedAt;
+
+    // OPTIONAL: store last resubmit comment from user
+    @Column(length = 2000)
+    private String resubmitComment;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -96,24 +113,42 @@ public class Claim {
     }
 
     @PreUpdate
-    void touch() {
-        this.updatedAt = Instant.now();
-    }
+    void touch() { this.updatedAt = Instant.now(); }
 
-    // -------- Convenience (read-only) accessors sourced from User --------
+    /* ===== Convenience (read-only) accessors sourced from User ===== */
     @Transient
-    public String getUserName() {
-        return user != null ? user.getName() : null;
-    }
+    public String getUserName() { return user != null ? user.getName() : null; }
 
     @Transient
-    public String getUserEmail() {
-        return user != null ? user.getEmail() : null;
-    }
+    public String getUserEmail() { return user != null ? user.getEmail() : null; }
 
     @Transient
-    public String getDesignation() {
-        return user != null ? user.getDesignation() : null;
+    public String getDesignation() { return user != null ? user.getDesignation() : null; }
+
+    /* ===== Convenience helpers used by UI/services ===== */
+
+    /** Does this claim currently have a receipt stored (any form). */
+    public void markRecalled(String reason, boolean requireAttachment) {
+        this.setStatus(ClaimStatus.RECALLED);
+        this.setRecallActive(true);
+        this.setRecallReason(reason);
+        this.setRecallRequireAttachment(requireAttachment);
     }
 
+    public void clearRecall(String resubmitComment) {
+        this.setRecallActive(false);
+        this.setRecallReason(null);
+        this.setRecallRequireAttachment(false);
+        this.setResubmitComment(resubmitComment);
+        this.setStatus(ClaimStatus.PENDING);
+    }
+
+    // Convenience flag used by service.resubmit(...)
+    @Transient
+    public boolean getHasReceipt() {
+        if (this.getReceiptFile() != null && this.getReceiptFile().length > 0) return true;
+        if (this.getReceiptSize() != null && this.getReceiptSize() > 0) return true;
+        if (this.getReceiptFilename() != null && !this.getReceiptFilename().isBlank()) return true;
+        return this.getReceiptUrl() != null && !this.getReceiptUrl().isBlank();
+    }
 }

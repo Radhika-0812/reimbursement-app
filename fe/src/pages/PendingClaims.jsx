@@ -53,6 +53,26 @@ async function sniffMime(blob) {
 const displayAmount = (claim) => formatCents(centsFromClaim(claim), currencyOfClaim(claim));
 const formatDate = (ts) => { try { return new Date(ts).toLocaleString(); } catch { return ts || ""; } };
 
+/* ================= Recall helpers ================= */
+const isRecall = (c) => {
+  const s = String(c?.status || "").toUpperCase();
+  return (
+    s === "RECALLED" ||
+    s === "NEEDS_INFO" ||
+    c?.recallRequired === true ||
+    c?.recall?.active === true
+  );
+};
+const recallReasonOf = (c) =>
+  c?.recallReason ||
+  c?.recall?.reason ||
+  c?.adminComment ||
+  c?.admin_comment ||
+  c?.notes ||
+  c?.comment ||
+  "";
+
+/* =============== Fullscreen Receipt Preview =============== */
 function FullscreenPreview({ open, preview, onClose }) {
   useEffect(() => {
     if (!open) return;
@@ -85,6 +105,7 @@ function FullscreenPreview({ open, preview, onClose }) {
   );
 }
 
+/* =============== Local Pagination (unchanged) =============== */
 function LocalPagination({ page, pageSize, total, onPage }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
@@ -130,6 +151,71 @@ function LocalPagination({ page, pageSize, total, onPage }) {
 
 const PAGE_SIZE = 4;
 
+/* =============== Resubmit Modal (new) =============== */
+function ResubmitModal({ open, onClose, claim, onResubmit, busy }) {
+  const [comment, setComment] = useState("");
+  const [file, setFile] = useState(null);
+
+  useEffect(() => { if (open) { setComment(""); setFile(null); } }, [open]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border shadow-xl p-4"
+           onClick={(e)=>e.stopPropagation()}
+           style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+        <div className="text-lg font-semibold mb-2">Fix &amp; Resubmit</div>
+        <div className="text-sm mb-3" style={{ color: "color-mix(in oklch, var(--foreground) 70%, transparent)" }}>
+          Please address the admin’s comments and optionally attach supporting file(s).
+        </div>
+
+        <label className="block text-sm mb-3">
+          <span>Comment to admin</span>
+          <textarea
+            rows={3}
+            className="mt-1 w-full rounded-md border px-3 py-2"
+            style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+            value={comment}
+            onChange={(e)=>setComment(e.target.value)}
+            placeholder="Add a brief explanation or details…"
+            required
+          />
+        </label>
+
+        <label className="block text-sm mb-4">
+          <span>Attachment (optional)</span>
+          <input
+            type="file"
+            onChange={(e)=>setFile(e.target.files?.[0] || null)}
+            className="block w-full mt-1 text-sm file:mr-3 file:rounded-md file:border file:px-3 file:py-1.5"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*,application/pdf"
+          />
+          <div className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+            Images, PDF, Office docs, txt, csv. Max 10MB.
+          </div>
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose}
+                  className="px-3 py-1.5 rounded-md border"
+                  style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+            Cancel
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => onResubmit({ comment, file })}
+            className="px-3 py-1.5 rounded-md"
+            style={{ background: "var(--primary)", color: "var(--primary-foreground)", opacity: busy ? 0.8 : 1 }}
+          >
+            {busy ? "Submitting…" : "Resubmit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ======================= Page ======================= */
 export default function PendingClaims() {
   const { pending: pendingRaw = [], loading, refresh } = useClaims();
   const auth = useAuth();
@@ -139,6 +225,11 @@ export default function PendingClaims() {
   const [openingId, setOpeningId] = useState(null);
   const [hasReceiptMap, setHasReceiptMap] = useState({});
   const [preview, setPreview] = useState({ open: false, url: "", contentType: "", filename: "", supported: false, claimId: null });
+
+  // NEW: resubmit modal state
+  const [resubmitOpen, setResubmitOpen] = useState(false);
+  const [resubmitClaim, setResubmitClaim] = useState(null);
+  const [resubmitBusy, setResubmitBusy] = useState(false);
 
   const didInitRef = useRef(false);
   useEffect(() => {
@@ -261,6 +352,64 @@ export default function PendingClaims() {
     } finally { setOpeningId(null); }
   }
 
+  /* ============== Resubmit handler (new) ============== */
+  async function handleResubmit({ comment, file }) {
+    if (!resubmitClaim?.id && !resubmitClaim?.claimId) return;
+    const id = resubmitClaim.id ?? resubmitClaim.claimId;
+    setResubmitBusy(true);
+    try {
+      const headers = await authHeaders();
+
+      // 1) Optional attachment upload (attachments endpoint first; fallback to receipt)
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("kind", "RECALL_EVIDENCE"); // harmless if backend ignores
+
+        let uploaded = false;
+        try {
+          const r1 = await fetch(`${API_BASE_URL}/api/claims/${id}/attachments`, {
+            method: "POST", headers, body: fd, credentials: "include",
+          });
+          if (r1.ok) uploaded = true;
+        } catch {/* ignore and fallback */}
+
+        if (!uploaded) {
+          try {
+            const r2 = await fetch(`${API_BASE_URL}/api/claims/${id}/receipt`, {
+              method: "POST", headers, body: fd, credentials: "include",
+            });
+            if (!r2.ok) throw new Error("Attachment upload failed");
+            uploaded = true;
+          } catch (e) {
+            toast(e.message || "Attachment upload failed; continuing without file", { type: "warning" });
+          }
+        }
+      }
+
+      // 2) Resubmit
+      const r = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
+        method: "PATCH",
+        headers: { ...(headers || {}), "Content-Type": "application/json" },
+        body: JSON.stringify({ comment }),
+        credentials: "include",
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(t || "Resubmit failed");
+      }
+
+      toast("Claim resubmitted to admin 🎉", { type: "success" });
+      setResubmitOpen(false);
+      setResubmitClaim(null);
+      await refresh?.();
+    } catch (e) {
+      toast(e.message || "Could not resubmit", { type: "error" });
+    } finally {
+      setResubmitBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6" style={{ color: "var(--foreground)", background: "var(--background)" }}>
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -294,6 +443,8 @@ export default function PendingClaims() {
               const canView = hasReceiptFor(c);
               const createdTs = c.createdAt || c.updatedAt;
               const code = currencyOfClaim(c); // 👈 INR or MYR
+              const recalled = isRecall(c);
+              const reason = recallReasonOf(c);
 
               return (
                 <div key={id} className="rounded-xl border overflow-hidden"
@@ -305,6 +456,12 @@ export default function PendingClaims() {
                       <div className="font-medium capitalize truncate">{c.title ?? c.category ?? "—"}</div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {recalled && (
+                        <span className="px-2 py-1 rounded-md text-xs font-medium"
+                              style={{ background: "var(--destructive)", color: "var(--primary-foreground)" }}>
+                          Action required
+                        </span>
+                      )}
                       {canView && (
                         <button onClick={() => viewReceipt(id)}
                                 className="text-sm px-3 py-1.5 rounded-md disabled:opacity-60"
@@ -316,10 +473,13 @@ export default function PendingClaims() {
                     </div>
                   </div>
 
+                  {/* body */}
                   <div className="px-4 py-3 grid sm:grid-cols-2 gap-3 text-sm">
                     <div>
                       <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Status</div>
-                      <div className="font-medium">PENDING</div>
+                      <div className="font-medium">
+                        {recalled ? "NEEDS INFO" : "PENDING"}
+                      </div>
                     </div>
                     <div>
                       <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Created</div>
@@ -336,6 +496,28 @@ export default function PendingClaims() {
                       <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Type</div>
                       <div className="font-medium">{c.claimType || "—"}</div>
                     </div>
+
+                    {/* Recall reason + CTA */}
+                    {recalled && (
+                      <div className="sm:col-span-2 rounded-md border p-3"
+                           style={{ borderColor: "var(--border)", background: "color-mix(in oklch, var(--destructive) 10%, transparent)" }}>
+                        <div className="text-sm font-medium mb-1" style={{ color: "var(--destructive)" }}>
+                          Admin comments
+                        </div>
+                        <div className="text-sm mb-3" style={{ color: "var(--foreground)" }}>
+                          {reason || "Additional information required."}
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            className="px-3 py-1.5 rounded-md"
+                            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                            onClick={() => { setResubmitClaim(c); setResubmitOpen(true); }}
+                          >
+                            Fix &amp; Resubmit
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -351,6 +533,15 @@ export default function PendingClaims() {
         if (preview.url) URL.revokeObjectURL(preview.url);
         setPreview({ open:false, url:"", contentType:"", filename:"", supported:false, claimId:null });
       }} />
+
+      {/* Resubmit modal */}
+      <ResubmitModal
+        open={resubmitOpen}
+        onClose={() => { if (!resubmitBusy) { setResubmitOpen(false); setResubmitClaim(null); } }}
+        claim={resubmitClaim}
+        onResubmit={handleResubmit}
+        busy={resubmitBusy}
+      />
     </div>
   );
 }
