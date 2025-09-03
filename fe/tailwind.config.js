@@ -92,7 +92,7 @@ export default {
         inset: "inset 0 1px 0 rgba(255,255,255,.25)",
       },
 
-      /* --- Fonts from your CSS variables (plus legacy brand font) --- */
+      
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         serif: ["var(--font-serif)", "ui-serif", "serif"],
