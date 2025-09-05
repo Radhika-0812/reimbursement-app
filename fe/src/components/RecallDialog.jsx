@@ -1,86 +1,113 @@
 // src/components/RecallDialog.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "../lib/toast";
-import { adminRecallClaim, adminUploadRecallAttachment } from "../services/recall";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+function getAuth() {
+  const keys = [import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token", "access_token", "token", "jwt"];
+  for (const k of keys) {
+    const v = localStorage.getItem(k) || sessionStorage.getItem(k);
+    if (v) return v;
+  }
+  const m = document.cookie.match(/(?:^|; )(?:auth_token|access_token)=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 export default function RecallDialog({ open, claim, onClose, onDone }) {
   const [reason, setReason] = useState("");
-  const [needAttach, setNeedAttach] = useState(true);
-  const [file, setFile] = useState(null);
+  const [requireAttachment, setRequireAttachment] = useState(false);
   const [busy, setBusy] = useState(false);
-  const firstRef = useRef(null);
 
   useEffect(() => {
     if (open) {
       setReason("");
-      setNeedAttach(true);
-      setFile(null);
+      setRequireAttachment(false);
       setBusy(false);
-      setTimeout(() => firstRef.current?.focus(), 50);
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !claim) return null;
 
   async function submit() {
     const r = (reason || "").trim();
-    if (!r) { toast("Please enter a reason for recall", { type: "warning" }); return; }
+    if (!r) { toast("Please enter a reason", { type: "warning" }); return; }
+
     setBusy(true);
     try {
-      await adminRecallClaim(claim.id ?? claim.claimId, { reason: r, requireAttachment: !!needAttach });
-      if (file) await adminUploadRecallAttachment(claim.id ?? claim.claimId, file);
-      toast("Recall requested", { type: "success" });
+      const token = getAuth();
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/claims/${claim.id}/recall`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({ reason: r, requireAttachment }), // 👈 backend will ignore if not supported
+        }
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>"");
+        throw new Error(txt || "Failed to start recall");
+      }
+      toast("Recall started", { type: "success" });
       onDone?.();
       onClose?.();
     } catch (e) {
-      toast(e.responseText || e.message || "Recall failed", { type: "error" });
+      toast(e.message || "Failed to start recall", { type: "error" });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl border shadow-xl p-5"
-           style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
-        <div className="text-lg font-semibold mb-3">Recall Claim</div>
+    <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-2xl border shadow-xl p-4"
+        onClick={(e)=>e.stopPropagation()}
+        style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
+      >
+        <div className="text-lg font-semibold">Recall claim #{claim.id}</div>
+        <p className="text-sm mt-1" style={{ color: "color-mix(in oklch, var(--foreground) 70%, transparent)" }}>
+          Tell the user what needs to be fixed or added.
+        </p>
 
-        <div className="space-y-3">
-          <div className="text-sm">
-            <div className="mb-1 opacity-70">Reason</div>
-            <textarea
-              ref={firstRef}
-              rows={3}
-              className="w-full rounded-md border px-3 py-2"
-              style={{ background: "var(--input)", borderColor: "var(--border)", color: "var(--foreground)" }}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Explain what additional information/changes are required"
-            />
-          </div>
+        <label className="block text-sm mt-3">
+          <span>Reason</span>
+          <textarea
+            rows={3}
+            className="mt-1 w-full rounded-md border px-3 py-2"
+            style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+            value={reason}
+            onChange={(e)=>setReason(e.target.value)}
+            placeholder="e.g., Please upload the restaurant bill photo"
+            required
+          />
+        </label>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={needAttach} onChange={(e)=>setNeedAttach(e.target.checked)} />
-            Require user to attach a file in the response
-          </label>
+        <label className="mt-3 inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={requireAttachment} onChange={(e)=>setRequireAttachment(e.target.checked)} />
+          Need attachment from user
+        </label>
 
-          <div className="text-sm">
-            <div className="mb-1 opacity-70">Admin attachment (optional)</div>
-            <input type="file" onChange={(e)=>setFile(e.target.files?.[0] || null)} />
-            <div className="text-xs mt-1 opacity-70">Use this to attach an example/spec for the user.</div>
-          </div>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button className="px-3 py-1.5 rounded border"
-                  style={{ background: "var(--sidebar-accent)", borderColor: "var(--border)", color: "var(--foreground)" }}
-                  onClick={onClose} disabled={busy}>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-md border"
+            style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+            disabled={busy}
+          >
             Cancel
           </button>
-          <button className="px-3 py-1.5 rounded"
-                  style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
-                  onClick={submit} disabled={busy}>
-            {busy ? "Sending…" : "Recall"}
+          <button
+            onClick={submit}
+            className="px-3 py-1.5 rounded-md"
+            style={{ background: "var(--primary)", color: "var(--primary-foreground)", opacity: busy ? 0.8 : 1 }}
+            disabled={busy}
+          >
+            {busy ? "Sending…" : "Start recall"}
           </button>
         </div>
       </div>
