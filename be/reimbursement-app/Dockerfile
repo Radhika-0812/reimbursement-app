@@ -1,13 +1,16 @@
-# ── Stage 1: build ───────────────────────────────────────────────
-FROM gradle:8.10-jdk21 AS build
-WORKDIR /app
+FROM gradle:8.9-jdk21 AS build
+WORKDIR /workspace
+COPY gradlew ./
+COPY gradlew.bat ./
+COPY gradle ./gradle
+COPY build.gradle settings.gradle ./
+RUN ./gradlew --no-daemon dependencies || return 0
 COPY . .
-RUN gradle --no-daemon clean bootJar
+RUN ./gradlew clean bootJar -x test --no-daemon
 
-# ── Stage 2: run ─────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY --from=build /workspace/build/libs/*.jar app.jar
+ENV PORT=8080
 EXPOSE 8080
-HEALTHCHECK --interval=20s --timeout=3s --retries=5 CMD wget -qO- http://localhost:8080/actuator/health | grep '"status":"UP"' || exit 1
-ENTRYPOINT ["java","-jar","app.jar"]
+CMD ["sh","-c","java -jar app.jar --server.port=${PORT}"]

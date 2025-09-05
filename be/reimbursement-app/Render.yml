@@ -1,0 +1,71 @@
+# render.yaml — Reimbursement App (Docker) + PostgreSQL
+# Repo root must contain this file and your Dockerfile.
+
+services:
+  - type: web
+    name: reimbursement-app
+    runtime: docker
+    # repo: omitted -> defaults to the repo that contains this render.yaml
+    # region: frankfurt            # (optional) keep close to your users/DB
+    plan: free                     # upgrade if you need more RAM/CPU
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile   # adjust if your Dockerfile lives elsewhere
+    healthCheckPath: /actuator/health
+
+    envVars:
+      # ---- Spring profile & port binding ----
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: PORT
+        value: 8080                 # Render will still pass $PORT env; we’ll use it below
+
+      # ---- Management endpoints (optional) ----
+      - key: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+        value: health,info,mappings
+
+      # ---- JWT/Auth (example: let Render generate a strong secret) ----
+      - key: APP_SECURITY_JWT_HMAC_SECRET
+        generateValue: true
+      - key: APP_SECURITY_JWT_ISSUER
+        value: rms-auth
+      - key: APP_SECURITY_JWT_EXPIRES_MIN
+        value: "60"
+
+      # ---- JPA/Flyway (tweak as you like) ----
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+      - key: SPRING_FLYWAY_LOCATIONS
+        value: classpath:db/migration
+
+      # ---- Pull DB pieces from the managed Postgres below ----
+      - key: DB_HOST
+        fromDatabase:
+          name: rms-db
+          property: host
+      - key: DB_NAME
+        fromDatabase:
+          name: rms-db
+          property: database
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: rms-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: rms-db
+          property: password
+
+    # IMPORTANT:
+    # Since render.yaml cannot interpolate variables inside another env var,
+    # we build the JDBC URL in the start command using shell expansion.
+    dockerCommand: >
+      sh -c 'java -jar /app/app.jar
+      --server.port=${PORT}
+      --spring.datasource.url=jdbc:postgresql://${DB_HOST}:5432/${DB_NAME}?sslmode=require'
+
+databases:
+  - name: rms-db
+    plan: free
+    databaseName: reimbursedb   # Render may suffix this; the "database" property above will match
+    user: app                   # Render will generate the password
+    # ipAllowList: []           # (optional) empty list => private connections only
