@@ -9,17 +9,27 @@ import {
   currencyOfClaim,
 } from "../lib/money";
 import { C_CHAR, C_STEEL } from "../theme/palette";
-import RecallDialog from "../components/RecallDialog"; // 👈 recall modal
+import RecallDialog from "../components/RecallDialog";
 
 /* ===== Semantic colors ===== */
 const FG = "var(--foreground)";
 const BG = "var(--background)";
 const PRI = "var(--primary)";
 const PRI_FG = "var(--primary-foreground)";
-const C_TAUPE = C_CHAR;   // secondary (reject)
+const C_TAUPE = C_CHAR;     // secondary (reject)
 const C_EGGSHELL = C_STEEL; // input bg
-const BORDER = FG;        // borders
-const SURFACE = BG;       // surfaces
+const BORDER = FG;          // borders
+const SURFACE = BG;         // surfaces
+
+/* ===== Shared control styling for Year/Month/Refresh ===== */
+const CONTROL_CLS =
+  "h-9 px-3 rounded border text-sm w-[140px] sm:w-[160px]";
+const CONTROL_STYLE = {
+  background: C_EGGSHELL,
+  borderColor: BORDER,
+  borderWidth: 1,
+  color: FG,
+};
 
 /* ===== Config ===== */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -190,14 +200,14 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
         <div className="mt-3 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 rounded border text-sm"
+            className="px-3 py-1.5 rounded border text-sm cursor-pointer"
             style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-3 py-1.5 rounded text-sm"
+            className="px-3 py-1.5 rounded text-sm cursor-pointer"
             style={{ background: kind === "approve" ? PRI : C_TAUPE, color: PRI_FG }}
           >
             Confirm
@@ -219,20 +229,31 @@ function FullscreenPreview({ open, onClose, preview }) {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-2 overflow-y-auto"
+      onClick={onClose}
+      style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
+    >
       <button
         aria-label="Close"
-        className="absolute top-4 right-4 px-3 py-2 rounded"
+        className="absolute top-4 right-4 px-3 py-2 rounded cursor-pointer"
         style={{ background: PRI, color: PRI_FG }}
         onClick={(e) => { e.stopPropagation(); onClose(); }}
       >
         ✕
       </button>
-      <div className="max-w-[95vw] max-h-[92vh] w-full h-full p-2 flex items-center justify-center" onClick={(e)=>e.stopPropagation()}>
+
+      <div
+        className="max-w-[95vw] w-full max-h-[92svh] rounded-lg border overflow-auto p-2"
+        style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, WebkitOverflowScrolling: "touch" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {preview?.supported ? (
-          preview.contentType.includes("pdf")
-            ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-full border-0 rounded-lg" />
-            : <img src={preview.url} alt="Receipt" className="max-w-full max-h-full rounded-lg object-contain" />
+          preview.contentType.includes("pdf") ? (
+            <iframe title="Receipt PDF" src={preview.url} className="w-full h-[85svh] border-0 rounded-lg" />
+          ) : (
+            <img src={preview.url} alt="Receipt" className="block max-w-none rounded-lg" />
+          )
         ) : (
           <div className="text-white">Preview not available</div>
         )}
@@ -327,18 +348,32 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      {/* Overlay is scrollable so large cards never overflow off-screen */}
+      <div
+        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
+        onClick={onClose}
+        style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
+      >
+        {/* The card itself is also scrollable and capped to viewport height */}
         <div
-          className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-hidden"
-          style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
+          className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-y-auto max-h-[90svh]"
+          style={{
+            background: SURFACE,
+            borderColor: BORDER,
+            borderWidth: 1,
+            color: FG,
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-y",
+          }}
+          onClick={(e) => e.stopPropagation()}
         >
           <div
-            className="px-5 py-4 border-b flex items-center justify-between"
+            className="px-5 py-4 border-b flex items-center justify-between sticky top-0 z-10"
             style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
           >
             <div className="text-lg font-semibold">Claim Details</div>
             <button
-              className="px-3 py-1 rounded border"
+              className="px-3 py-1 rounded border cursor-pointer"
               style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
               onClick={onClose}
               ref={firstBtnRef}
@@ -368,12 +403,17 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
               <div className="px-3 py-2 text-sm border-b" style={{ borderColor: BORDER, background: SURFACE, color: FG }}>
                 Receipt
               </div>
-              <div className="p-3 min-h-64 flex items-center justify-center" style={{ background: C_EGGSHELL }}>
+
+              {/* Scrollable preview area (desktop + mobile) */}
+              <div
+                className="p-3 min-h-64 max-h-[60svh] overflow-auto flex items-center justify-center"
+                style={{ background: C_EGGSHELL, WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+              >
                 {!preview.has && <div className="text-sm" style={{ color: `${FG}99` }}>No receipt uploaded.</div>}
                 {preview.has && preview.supported && (
                   preview.contentType.includes("pdf")
-                    ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-96 border-0" />
-                    : <img src={preview.url} alt="Receipt" className="max-h-96 object-contain" />
+                    ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-[56svh] border-0 rounded" />
+                    : <img src={preview.url} alt="Receipt" className="block max-w-none rounded" />
                 )}
                 {preview.has && !preview.supported && (
                   <div className="text-center">
@@ -381,16 +421,17 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
                       Preview not supported for this file type
                       <span className="block text-xs mt-1">({preview.contentType || "unknown"})</span>
                     </div>
-                    <button onClick={downloadUnsupported} className="px-3 py-2 rounded" style={{ background: PRI, color: PRI_FG }}>
+                    <button onClick={downloadUnsupported} className="px-3 py-2 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}>
                       Download file
                     </button>
                   </div>
                 )}
               </div>
+
               <div className="px-3 py-2 flex items-center justify-between border-t" style={{ color: `${FG}99`, borderColor: BORDER }}>
                 <div>{preview.supported ? "View-only preview shown. Expand for fullscreen." : "Preview unavailable; download provided."}</div>
                 {preview.has && preview.supported && (
-                  <button className="px-3 py-1.5 rounded" style={{ background: PRI, color: PRI_FG }} onClick={() => setFull(true)}>
+                  <button className="px-3 py-1.5 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }} onClick={() => setFull(true)}>
                     Expand
                   </button>
                 )}
@@ -398,55 +439,58 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
             </div>
           </div>
 
-          {canAct ? (
-            <div className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                 style={{ borderColor: BORDER, background: SURFACE }}>
-              <div className="flex-1">
-                <label className="text-sm" style={{ color: `${FG}CC` }}>Reject reason (required to reject)</label>
-                <textarea
-                  rows={2}
-                  value={rejectComment}
-                  onChange={(e) => { setRejectComment(e.target.value); if (rejectNeedsComment && e.target.value.trim()) setRejectNeedsComment(false); }}
-                  className="w-full mt-1 p-2 rounded border"
-                  style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}
-                  placeholder="Explain why this claim is rejected"
-                />
-                {rejectNeedsComment && !rejectComment.trim() && (
-                  <div className="text-xs mt-1" style={{ color: "#b91c1c" }}>Comment is required to reject.</div>
-                )}
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button className="px-4 py-2 rounded border"
+          {/* Footer */}
+          <div className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+               style={{ borderColor: BORDER, background: SURFACE }}>
+            {canAct ? (
+              <>
+                <div className="flex-1">
+                  <label className="text-sm" style={{ color: `${FG}CC` }}>Reject reason (required to reject)</label>
+                  <textarea
+                    rows={2}
+                    value={rejectComment}
+                    onChange={(e) => { setRejectComment(e.target.value); if (rejectNeedsComment && e.target.value.trim()) setRejectNeedsComment(false); }}
+                    className="w-full mt-1 p-2 rounded border"
+                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}
+                    placeholder="Explain why this claim is rejected"
+                  />
+                  {rejectNeedsComment && !rejectComment.trim() && (
+                    <div className="text-xs mt-1" style={{ color: "#b91c1c" }}>Comment is required to reject.</div>
+                  )}
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button className="px-4 py-2 rounded border cursor-pointer"
+                          style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+                          onClick={onClose}
+                          disabled={submitting}>
+                    Close
+                  </button>
+                  <button className="px-4 py-2 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}
+                          onClick={() => setConfirm({ open: true, kind: "approve" })}
+                          disabled={submitting}>
+                    Approve
+                  </button>
+                  <button className="px-4 py-2 rounded cursor-pointer" style={{ background: C_TAUPE, color: PRI_FG }}
+                          onClick={() => {
+                            const comment = (rejectComment || "").trim();
+                            if (!comment) { setRejectNeedsComment(true); toast("Need comments", { type: "warning" }); return; }
+                            setConfirm({ open: true, kind: "reject" });
+                          }}
+                          disabled={submitting}>
+                    Reject
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-end w-full">
+                <button className="px-4 py-2 rounded border cursor-pointer"
                         style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
-                        onClick={onClose}
-                        disabled={submitting}>
+                        onClick={onClose}>
                   Close
                 </button>
-                <button className="px-4 py-2 rounded" style={{ background: PRI, color: PRI_FG }}
-                        onClick={() => setConfirm({ open: true, kind: "approve" })}
-                        disabled={submitting}>
-                  Approve
-                </button>
-                <button className="px-4 py-2 rounded" style={{ background: C_TAUPE, color: PRI_FG }}
-                        onClick={() => {
-                          const comment = (rejectComment || "").trim();
-                          if (!comment) { setRejectNeedsComment(true); toast("Need comments", { type: "warning" }); return; }
-                          setConfirm({ open: true, kind: "reject" });
-                        }}
-                        disabled={submitting}>
-                  Reject
-                </button>
               </div>
-            </div>
-          ) : (
-            <div className="px-5 py-4 border-t flex justify-end" style={{ borderColor: BORDER, background: SURFACE }}>
-              <button className="px-4 py-2 rounded border"
-                      style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
-                      onClick={onClose}>
-                Close
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <ConfirmToast
@@ -468,9 +512,9 @@ export default function AdminDashboard() {
   const token = getAuth();
 
   // Filters (global)
-  const [from, setFrom] = useState(""); // default empty = no lower bound
-  const [to, setTo] = useState("");     // default empty = no upper bound
-  const [status, setStatus] = useState(""); // export-only status; table uses tabs
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [status, setStatus] = useState("");
   const [email, setEmail] = useState("");
   const [emailOptions, setEmailOptions] = useState([]);
   const [month, setMonth] = useState("");
@@ -479,7 +523,7 @@ export default function AdminDashboard() {
   // Table state
   const [statusTab, setStatusTab] = useState("PENDING");
   const [rows, setRows] = useState([]);
-  const [page, setPage] = useState(1);
+ const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -492,7 +536,7 @@ export default function AdminDashboard() {
   const [detailClaim, setDetailClaim] = useState(null);
 
   // Recall modal (admin)
-  const [recallClaim, setRecallClaim] = useState(null); // 👈
+  const [recallClaim, setRecallClaim] = useState(null);
 
   // Loading/Error
   const [loading, setLoading] = useState(true);
@@ -513,7 +557,7 @@ export default function AdminDashboard() {
 
   /* ===== KPIs: counts + currency totals honoring filters ===== */
   async function fetchKpis() {
-    const statuses = ["PENDING","APPROVED","REJECTED"];
+    const statuses = ["PENDING", "APPROVED", "REJECTED"];
     const countsAcc = { pending: 0, approved: 0, rejected: 0 };
     const sums = { INR: 0, MYR: 0 };
     const PAGE_SIZE_FOR_KPI = 200;
@@ -730,8 +774,6 @@ export default function AdminDashboard() {
       const { from: f, to: t } = monthBounds(y, month);
       setFrom(f);
       setTo(t);
-    } else {
-      // if either year/month cleared, don't constrain by month/year
     }
   }, [month, year]);
 
@@ -781,29 +823,38 @@ export default function AdminDashboard() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <h1 className="text-2xl font-semibold">Admin Claims</h1>
 
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3" style={{ rowGap: "0.5rem" }}>
           <div className="flex flex-col">
             <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Year</label>
-            <select value={year} onChange={(e)=>setYear(e.target.value)}
-                    className="rounded px-2 py-1 border"
-                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
+            <select
+              value={year}
+              onChange={(e)=>setYear(e.target.value)}
+              className={CONTROL_CLS}
+              style={CONTROL_STYLE}
+            >
               {years.map((y, i) => <option key={i} value={y}>{y || "All"}</option>)}
             </select>
           </div>
 
           <div className="flex flex-col">
             <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Month</label>
-            <select value={month} onChange={(e)=>setMonth(e.target.value)}
-                    className="rounded px-2 py-1 border"
-                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
+            <select
+              value={month}
+              onChange={(e)=>setMonth(e.target.value)}
+              className={CONTROL_CLS}
+              style={CONTROL_STYLE}
+            >
               {months.map((m) => <option key={m.v || "all"} value={m.v}>{m.n}</option>)}
             </select>
           </div>
 
+          <div className="hidden sm:block w-2" />
+
           <button
             onClick={() => { fetchKpis(); fetchList(statusTab, page); toast("Refreshed", { type: "info", duration: 1500 }); }}
-            className="px-3 py-2 rounded border"
-            style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+            className={`${CONTROL_CLS} cursor-pointer flex items-center justify-center whitespace-nowrap`}
+            style={CONTROL_STYLE}
+            title="Refresh data"
           >
             Refresh
           </button>
@@ -817,7 +868,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* KPIs (filtered) incl. totals per currency — hide a currency if zero */}
+      {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         <Kpi label="Pending"  value={counts.pending} />
         <Kpi label="Approved" value={counts.approved} />
@@ -826,7 +877,7 @@ export default function AdminDashboard() {
         {kpiSums.MYR > 0 && <Kpi label="Total (MYR)" value={formatCents(kpiSums.MYR, "MYR")} />}
       </div>
 
-      {/* Export & Filters (no Year/Month here) */}
+      {/* Export & Filters */}
       <div className="flex flex-wrap items-end gap-3 p-3 border rounded-2xl"
            style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1 }}>
         <div className="flex flex-col">
@@ -878,7 +929,7 @@ export default function AdminDashboard() {
           </select>
         </div>
 
-        <button onClick={runExport} className="px-4 py-2 rounded" style={{ background: PRI, color: PRI_FG }}>
+        <button onClick={runExport} className="px-4 py-2 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}>
           Download
         </button>
       </div>
@@ -933,7 +984,6 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2" title={displayUserEmail(c)}>{displayUserEmail(c)}</td>
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
                   <td className="px-4 py-2">{c.title}</td>
-                  {/* amount in claim's currency (INR/MYR), no decimals */}
                   <td className="px-4 py-2">{formatCentsForClaim(c)}</td>
                   <td className="px-4 py-2">{c.status}</td>
                   {statusTab === "REJECTED" && (
@@ -946,7 +996,7 @@ export default function AdminDashboard() {
                     <div className="inline-flex gap-2">
                       {(c.status === "APPROVED" || c.status === "REJECTED") && (
                         <button
-                          className="px-3 py-1 rounded border"
+                          className="px-3 py-1 rounded border cursor-pointer"
                           style={{ background: C_EGGSHELL, borderColor: BORDER, color: FG }}
                           onClick={() => setRecallClaim(c)}
                           title="Recall this claim from the user"
@@ -955,7 +1005,7 @@ export default function AdminDashboard() {
                         </button>
                       )}
                       <button
-                        className="px-3 py-1 rounded"
+                        className="px-3 py-1 rounded cursor-pointer"
                         style={{ background: PRI, color: PRI_FG }}
                         onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
                         title="Open details & fullscreen preview"
@@ -976,7 +1026,7 @@ export default function AdminDashboard() {
             <div />
             <div>
               <button
-                className="px-3 py-1 rounded border mr-2 disabled:opacity-50"
+                className="px-3 py-1 rounded border mr-2 disabled:opacity-50 cursor-pointer"
                 style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
                 onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page <= 1}
@@ -985,7 +1035,7 @@ export default function AdminDashboard() {
               </button>
               <span className="text-sm">Page {page} / {pageCount}</span>
               <button
-                className="px-3 py-1 rounded border ml-2 disabled:opacity-50"
+                className="px-3 py-1 rounded border ml-2 disabled:opacity-50 cursor-pointer"
                 style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
                 onClick={() => { const p = Math.min(pageCount, page + 1); setPage(p); fetchList(statusTab, p); }}
                 disabled={page >= pageCount}
@@ -997,6 +1047,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Detail modal */}
       <DetailsModal
         open={detailOpen}
         claim={detailClaim}
