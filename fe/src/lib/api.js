@@ -5,7 +5,7 @@ import axios from "axios";
 const API_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   (typeof process !== "undefined" && process.env?.REACT_APP_API_URL) ||
-  "http://localhost:8080";
+  "https://reimbursement-app-7wy3.onrender.com";
 
 const USE_COOKIES =
   ((typeof import.meta !== "undefined" && import.meta.env?.VITE_USE_COOKIES) ||
