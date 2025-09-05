@@ -3,7 +3,7 @@ WORKDIR /workspace
 COPY gradlew ./
 COPY gradlew.bat ./
 COPY gradle ./gradle
-COPY build.gradle settings.gradle ./
+COPY build.gradle ./
 RUN ./gradlew --no-daemon dependencies || return 0
 COPY . .
 RUN ./gradlew clean bootJar -x test --no-daemon
