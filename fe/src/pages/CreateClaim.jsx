@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { toast } from "../lib/toast";
 import { CURRENCY_META } from "../lib/money";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 
 /* ---------- Auth + HTTP (unchanged) ---------- */
 function getAuth() {
@@ -51,7 +51,7 @@ async function http(method, path, { token, body, headers: extra } = {}) {
 }
 
 /* ---------- Helpers for multi-row UI ---------- */
-const CLAIM_TYPES = ["CAB_ALLOWANCE", "MEAL", "TRAVEL", "OFFICE_SUPPLIES", "POSTAGE"];
+const CLAIM_TYPES = ["CAB_ALLOWANCE", "MEAL", "PETROL_ALLOWANCE", "OFFICE_SUPPLY", "POSTAGE"];
 
 function newRow() {
   return {
@@ -108,6 +108,7 @@ async function createManyClaims(token, rows) {
   // 1) try /batch
   try {
     const data = await http("POST", "/api/claims", { token, body: batch });
+    console.log(data.CLAIM_TYPES);
     return normalize(data);
   } catch (e) {
     // only fall through on typical "wrong endpoint" errors
