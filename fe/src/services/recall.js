@@ -11,7 +11,7 @@
  *  - User change request (no recall button): POST /api/claims/:id/change-request (body: { message })
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 const AUTH_TOKEN_KEYS = [
   import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token",
   "access_token",
