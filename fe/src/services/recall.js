@@ -61,10 +61,7 @@ async function request(method, path, { json, formData, headers: extra } = {}) {
 
 /* ---------------- Admin: recall / need attachment ---------------- */
 
-/** Admin: one function used by RecallDialog
- *  If requireAttachment = true → hits /request-attachment (with note)
- *  Else → hits /recall (with reason)
- */
+
 export async function adminRecallClaim(claimId, { reason, requireAttachment } = {}) {
   const id = String(claimId);
   const r = (reason || "").trim();
