@@ -960,7 +960,7 @@ export default function AdminDashboard() {
         open={detailOpen}
         claim={detailClaim}
         token={token}
-        canAct={statusTab === "PENDING"}  // only allow approve/reject on Pending
+        canAct={statusTab === "PENDING"}  
         onClose={() => { setDetailOpen(false); setDetailClaim(null); }}
         onApprove={doApprove}
         onReject={doReject}
