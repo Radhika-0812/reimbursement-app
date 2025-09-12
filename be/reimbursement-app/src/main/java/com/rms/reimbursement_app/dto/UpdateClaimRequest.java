@@ -10,13 +10,8 @@ import java.time.LocalDate;
 
 public class UpdateClaimRequest {
 
-    @NotBlank
     private String title;
-
-    @NotNull
-    @Min(0)
     private Long amountCents;
-
     private String description;     // optional
     private LocalDate claimDate;    // optional
     private CurrencyCode currencyCode; // optional (keep null to not change)
