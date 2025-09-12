@@ -1052,7 +1052,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Detail modal */}
+      
       <DetailsModal
         open={detailOpen}
         claim={detailClaim}
