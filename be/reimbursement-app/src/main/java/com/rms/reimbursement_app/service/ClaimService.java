@@ -8,6 +8,7 @@ import com.rms.reimbursement_app.domain.ClaimStatus;
 import com.rms.reimbursement_app.repository.ClaimRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -32,7 +33,7 @@ public class ClaimService {
     private final ClaimRepository repo;
 
     @PersistenceContext
-    private EntityManager em; // for flush + refresh
+    private EntityManager em;
 
     // ---- File constraints ----
     private static final long MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
@@ -49,7 +50,7 @@ public class ClaimService {
     // ===================== Create / Read =====================
 
     @Transactional
-    public List<Claim> createBatch(Long userId, List<CreateClaimRequest> items) {
+    public List<Claim> createBatch(Long userId, List<@Valid CreateClaimRequest> items) {
         if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No claims provided");
         }
@@ -58,7 +59,6 @@ public class ClaimService {
             if (in.getTitle() == null || in.getTitle().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required");
             }
-
             Long amountCents = in.getAmountCents();
             if (amountCents == null || amountCents <= 0L) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountCents must be > 0");
@@ -161,11 +161,7 @@ public class ClaimService {
 
     // ===================== Recall Flow =====================
 
-    /**
-     * Admin starts recall with a reason.
-     * If requireAttachment=true, user will see Edit UI and must attach receipt before resubmit.
-     * Status becomes RECALLED (backend source of truth).
-     */
+    /** Admin starts recall with a reason (status → RECALLED). */
     @Transactional
     public Claim adminStartRecall(Long id, String reason, boolean requireAttachment) {
         if (reason == null || reason.isBlank()) {
@@ -179,14 +175,11 @@ public class ClaimService {
         c.setRecallRequireAttachment(requireAttachment);
         c.setResubmitComment(null);
         c.setRecalledAt(Instant.now());
-        c.setStatus(ClaimStatus.RECALLED); // 🔑 RECALLED state
+        c.setStatus(ClaimStatus.RECALLED);
         return repo.save(c);
     }
 
-    /**
-     * Admin explicitly requests attachment (shorthand using repository query).
-     * Equivalent to adminStartRecall(id, note, true) + adminComment.
-     */
+    /** Admin shorthand to mark “need attachment” with note. */
     @Transactional
     public Claim adminRequestAttachment(Long id, String note) {
         if (note == null || note.isBlank()) {
@@ -199,20 +192,17 @@ public class ClaimService {
         return repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found after update"));
     }
 
-    /** Admin cancels recall: clear the flags; status moves back to PENDING. */
+    /** Admin cancels recall: clear flags; status → PENDING. */
     @Transactional
     public Claim adminCancelRecall(Long id) {
         var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
-        c.setRecallActive(false);
-        c.setRecallReason(null);
-        c.setRecallRequireAttachment(false);
-        c.setStatus(ClaimStatus.PENDING);
+        clearRecallAndSetPending(c);
         return repo.save(c);
     }
 
     /**
      * User resubmits after recall. Optional file + comment.
-     * Clears recall flags and keeps status PENDING (admin will re-review).
+     * Always returns to PENDING (regardless of “need attachment” selection).
      */
     @Transactional
     public Claim resubmit(Long claimId, Long currentUserId, String resubmitComment, MultipartFile optionalFile)
@@ -224,10 +214,8 @@ public class ClaimService {
                     exists ? "Not your claim" : "Claim not found");
         });
 
-        if (!c.isRecallActive()) {
-            // Not in recall mode → no-op
-            return c;
-        }
+        // Not in recall → no-op
+        if (!c.isRecallActive()) return c;
 
         if (optionalFile != null && !optionalFile.isEmpty()) {
             assignAndValidateFile(c, optionalFile);
@@ -236,12 +224,7 @@ public class ClaimService {
             c.setResubmitComment(resubmitComment.trim());
         }
 
-        // Clear recall flags + set status back to PENDING
-        c.setRecallActive(false);
-        c.setRecallReason(null);
-        c.setRecallRequireAttachment(false);
-        c.setResubmittedAt(Instant.now());
-        c.setStatus(ClaimStatus.PENDING);
+        clearRecallAndSetPending(c);
         return repo.save(c);
     }
 
@@ -253,10 +236,11 @@ public class ClaimService {
     }
 
     /**
-     * ✅ User can edit details ONLY when:
-     *  - status = RECALLED
-     *  - recallActive = true
-     *  - recallRequireAttachment = true
+     * User can edit details while:
+     *  - PENDING or SUBMITTED, or
+     *  - RECALLED (recallActive = true).
+     * If the claim is in recall **and** “need attachment” is NOT required,
+     * saving edits counts as a reaction → status goes back to PENDING.
      */
     @Transactional
     public Claim updateClaimAsUser(Long claimId, Long currentUserId, UpdateClaimRequest req) {
@@ -264,23 +248,18 @@ public class ClaimService {
             boolean exists = repo.existsById(claimId);
             return new ResponseStatusException(
                     exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
-                    exists ? "Not your claim" : "Claim not found"
-            );
+                    exists ? "Not your claim" : "Claim not found");
         });
 
-        // ✅ Allow edit while PENDING, or while in an active recall
-        boolean canEdit =
-                c.getStatus() == ClaimStatus.PENDING ||
-                        (c.getStatus() == ClaimStatus.RECALLED && Boolean.TRUE.equals(c.isRecallActive()));
+        boolean editable =
+                c.getStatus() == ClaimStatus.PENDING
+                        || c.getStatus() == ClaimStatus.SUBMITTED
+                        || (c.getStatus() == ClaimStatus.RECALLED && c.isRecallActive());
 
-        if (!canEdit) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "You can only edit a claim that is Pending or in active Recall"
-            );
+        if (!editable) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Claim not editable in current state");
         }
 
-        // Apply safe updates (keep whatever helper you already have)
         c.applyUserEditDuringRecall(
                 req.getTitle(),
                 req.getAmountCents(),
@@ -290,15 +269,16 @@ public class ClaimService {
                 req.getClaimType()
         );
 
-        // NOTE: Do NOT flip status here. The transition back to PENDING
-        // happens in your /{id}/resubmit endpoints after the user responds.
+        // If recall is active but attachment is NOT required, the user’s edit is a valid reaction → back to PENDING.
+        if (c.getStatus() == ClaimStatus.RECALLED && c.isRecallActive() && !c.isRecallRequireAttachment()) {
+            clearRecallAndSetPending(c);
+        }
+
         return repo.save(c);
     }
 
-
     /**
-     * ✅ NEW: User leaves a change-request message for admin (no status change).
-     * Stores message in resubmitComment and updates resubmittedAt for visibility.
+     * User leaves a change-request message for admin (no status change).
      */
     @Transactional
     public void createUserChangeRequest(Long claimId, Long userId, String message) {
@@ -316,7 +296,6 @@ public class ClaimService {
 
         c.setResubmitComment(message.trim());
         c.setResubmittedAt(Instant.now());
-        // Do NOT change status here; admin decides next action.
         repo.save(c);
     }
 
@@ -344,6 +323,10 @@ public class ClaimService {
         );
     }
 
+    /**
+     * Owner/admin upload. If the claim is in recall (active), this counts as a reaction:
+     * recall flags are cleared and status becomes PENDING.
+     */
     @Transactional
     public Claim uploadReceiptForUser(Long claimId, Long currentUserId, boolean isAdmin, MultipartFile file)
             throws IOException {
@@ -358,6 +341,12 @@ public class ClaimService {
         });
 
         assignAndValidateFile(claim, file);
+
+        // If recall is active, uploading the file satisfies the requirement → back to PENDING.
+        if (claim.getStatus() == ClaimStatus.RECALLED && claim.isRecallActive()) {
+            clearRecallAndSetPending(claim);
+        }
+
         return repo.save(claim);
     }
 
@@ -413,6 +402,14 @@ public class ClaimService {
         claim.setReceiptFilename(file.getOriginalFilename());
         claim.setReceiptContentType(ct);
         claim.setReceiptSize(file.getSize());
+    }
+
+    private void clearRecallAndSetPending(Claim c) {
+        c.setRecallActive(false);
+        c.setRecallRequireAttachment(false);
+        c.setRecallReason(null);
+        c.setResubmittedAt(Instant.now());
+        c.setStatus(ClaimStatus.PENDING);
     }
 
     // Lightweight DTO for downloads
