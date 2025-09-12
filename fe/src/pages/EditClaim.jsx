@@ -67,11 +67,10 @@ export default function EditClaim() {
   const [opening, setOpening] = useState(false);
   const hiddenFile = useRef(null);
 
-  // 1) prime from context; fallback to fetch my/pending (first few pages)
   useEffect(() => {
     let mounted = true;
     (async () => {
-      // try from context
+      // seed from context first
       const fromCtx = (pending || []).find((c) => (c.id ?? c.claimId) === id);
       if (fromCtx) {
         if (!mounted) return;
@@ -81,10 +80,9 @@ export default function EditClaim() {
         return;
       }
 
-      // fallback: pull first N pending pages then search
+      // fallback: fetch a big pending page so the id likely appears
       try {
         const headers = await authHeaders(auth?.getAccessToken);
-        // pull a bigger page to likely include it
         const r = await fetch(`${API_BASE_URL}/api/claims/me/pending?page=1&size=200`, {
           headers, credentials: "include",
         });
@@ -133,6 +131,11 @@ export default function EditClaim() {
 
   async function handleSave() {
     if (!claim) return;
+
+    if (mustAttach && !hasReceipt) {
+      toast("Admin marked this claim as 'Need attachment'. Please upload the receipt first.", { type: "warning" });
+      return;
+    }
     if (!form.title.trim()) { toast("Title is required", { type: "warning" }); return; }
     if (!/^\d+$/.test(form.amount)) { toast("Amount must be a positive whole number", { type: "warning" }); return; }
     if (!form.claimDate) { toast("Claim date is required", { type: "warning" }); return; }
@@ -140,34 +143,46 @@ export default function EditClaim() {
     setBusy(true);
     try {
       const headers = await authHeaders(auth?.getAccessToken);
-      // Backend currently exposes PUT /api/claims/{id} (UpdateClaimRequest) for recall edits.
-      // We call it for both Pending and Recalled; server will enforce rules.
+
+      // 1) Save the edits first (server enforces whether it's allowed)
       const payload = {
         title: form.title.trim(),
-        amount: Number(form.amount),            // whole units (server can map)
-        amountCents: Number(form.amount),       // compatibility
+        amount: Number(form.amount),            // server-tolerant
+        amountCents: Number(form.amount),       // server-tolerant
         currency: form.currency,
         currencyCode: form.currency,
         claimType: form.claimType,
-        claimDate: form.claimDate,
+        claimDate: form.claimDate,              // "YYYY-MM-DD"
         description: form.description || "",
       };
-      const res = await fetch(`${API_BASE_URL}/api/claims/${id}`, {
+      const putRes = await fetch(`${API_BASE_URL}/api/claims/${id}`, {
         method: "PUT",
         headers: { ...(headers || {}), "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         credentials: "include",
       });
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(
-          t ||
-            (recalled
-              ? "Update failed (recall edit)"
-              : "Update failed (pending edit may be restricted by server)")
-        );
+      if (!putRes.ok) {
+        const t = await putRes.text().catch(() => "");
+        throw new Error(t || "Update failed");
       }
-      toast("Changes saved", { type: "success" });
+
+      // 2) If this claim was recalled, automatically resubmit → goes back to PENDING
+      if (recalled) {
+        const resub = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
+          method: "PATCH",
+          headers: { ...(headers || {}), "Content-Type": "application/json" },
+          body: JSON.stringify({ comment: "User updated claim after recall" }),
+          credentials: "include",
+        });
+        if (!resub.ok) {
+          const t = await resub.text().catch(() => "");
+          throw new Error(t || "Resubmit failed");
+        }
+        toast("Changes saved and resubmitted to admin", { type: "success" });
+      } else {
+        toast("Changes saved", { type: "success" });
+      }
+
       await refresh?.();
       navigate(-1);
     } catch (e) {
@@ -370,7 +385,6 @@ export default function EditClaim() {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (!f) return;
-              if (mustAttach && f.size === 0) { toast("File is empty", { type: "warning" }); return; }
               await handleUpload(f);
             }}
             className="hidden"
@@ -402,14 +416,14 @@ export default function EditClaim() {
               className="px-4 py-1.5 rounded-md text-white disabled:opacity-60"
               style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
             >
-              {busy ? "Saving…" : "Save changes"}
+              {busy ? "Saving…" : (recalled ? "Save & Resubmit" : "Save changes")}
             </button>
           </div>
         </div>
 
         {mustAttach && !hasReceipt && (
           <div className="text-xs mt-3" style={{ color: "var(--destructive)" }}>
-            Attachment required by admin — please upload a receipt before resubmitting.
+            Attachment required by admin — please upload a receipt before saving.
           </div>
         )}
       </div>
