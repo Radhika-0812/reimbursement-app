@@ -14,14 +14,14 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "claims")
 @Getter @Setter
-@DynamicUpdate // only updates changed columns (also helps avoid weird binds)
+@DynamicUpdate // only updates changed columns (helps avoid unnecessary DB updates)
 public class Claim {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Write this from JWT (uid). Relation below is read-only via this FK.
+    // Written from JWT (uid). Relation below is read-only via this FK.
     @Column(nullable = false, name = "user_id")
     private Long userId;
 
@@ -33,11 +33,11 @@ public class Claim {
     @Column(nullable = false, length = 140)
     private String title;
 
-    // 👇 date user is claiming for (not createdAt)
+    // 👇 Date user is claiming for (not createdAt)
     @Column(name = "claim_date")
     private LocalDate claimDate;
 
-    // store amounts in cents/paise
+    // Store amounts in cents/paise
     @Column(nullable = false)
     private Long amountCents;
 
@@ -75,13 +75,17 @@ public class Claim {
     @Column(nullable = false, length = 20)
     private ClaimStatus status = ClaimStatus.PENDING;
 
+    // Notes / comments set by Admin when bouncing back
     @Column(columnDefinition = "text")
     private String adminComment;
 
-    /* ===== Recall fields ===== */
+    /* ===== Recall / Attachment Request fields ===== */
+
+    // Admin has marked this claim as recalled (requires user action)
     @Column(nullable = false)
     private boolean recallActive = false;
 
+    // Optional explanation for recall
     @Column(length = 2000)
     private String recallReason;
 
@@ -89,17 +93,18 @@ public class Claim {
     @Column(name = "recall_require_attachment", nullable = false)
     private boolean recallRequireAttachment = false;
 
-    // Timestamps for auditability
+    // Timestamps for audit trail
     @Column(name = "recalled_at")
     private Instant recalledAt;
 
     @Column(name = "resubmitted_at")
     private Instant resubmittedAt;
 
-    // OPTIONAL: store last resubmit comment from user
+    // Last comment from user when resubmitting or requesting change
     @Column(length = 2000)
     private String resubmitComment;
 
+    // Standard audit columns
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -127,28 +132,53 @@ public class Claim {
 
     /* ===== Convenience helpers used by UI/services ===== */
 
-    /** Does this claim currently have a receipt stored (any form). */
+    /** Mark this claim as recalled (set by admin). */
     public void markRecalled(String reason, boolean requireAttachment) {
         this.setStatus(ClaimStatus.RECALLED);
         this.setRecallActive(true);
         this.setRecallReason(reason);
         this.setRecallRequireAttachment(requireAttachment);
+        this.setRecalledAt(Instant.now());
     }
 
+    /** Clear recall flags (set by user when resubmitting). */
     public void clearRecall(String resubmitComment) {
         this.setRecallActive(false);
         this.setRecallReason(null);
         this.setRecallRequireAttachment(false);
         this.setResubmitComment(resubmitComment);
         this.setStatus(ClaimStatus.PENDING);
+        this.setResubmittedAt(Instant.now());
     }
 
-    // Convenience flag used by service.resubmit(...)
+    /** Does this claim currently have a receipt stored in any form? */
     @Transient
     public boolean getHasReceipt() {
         if (this.getReceiptFile() != null && this.getReceiptFile().length > 0) return true;
         if (this.getReceiptSize() != null && this.getReceiptSize() > 0) return true;
         if (this.getReceiptFilename() != null && !this.getReceiptFilename().isBlank()) return true;
         return this.getReceiptUrl() != null && !this.getReceiptUrl().isBlank();
+    }
+
+    /** True when the owner is allowed to edit details during recall flow. */
+    @Transient
+    public boolean isEditableByOwnerDuringRecall() {
+        // Allowed only when admin has recalled AND specifically requested an attachment.
+        // We also require the claim to be in RECALLED status (as set in markRecalled).
+        return this.recallActive && this.recallRequireAttachment && this.status == ClaimStatus.RECALLED;
+    }
+
+    /** Apply safe user-editable fields during recall. */
+    public void applyUserEditDuringRecall(String title, Long amountCents, String description, LocalDate claimDate,
+                                          CurrencyCode currencyCode, ClaimType claimType) {
+        if (!isEditableByOwnerDuringRecall()) {
+            throw new IllegalStateException("Claim not editable in current state");
+        }
+        if (title != null && !title.isBlank()) this.title = title;
+        if (amountCents != null && amountCents >= 0) this.amountCents = amountCents;
+        if (description != null) this.description = description;
+        if (claimDate != null) this.claimDate = claimDate;
+        if (currencyCode != null) this.currencyCode = currencyCode;
+        if (claimType != null) this.claimType = claimType;
     }
 }

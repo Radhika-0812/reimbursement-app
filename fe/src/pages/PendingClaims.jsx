@@ -1,14 +1,15 @@
 // src/pages/PendingClaims.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useClaims } from "../state/ClaimsContext";
 import { on } from "../lib/eventBus";
 import { toast } from "../lib/toast";
 import { useAuth } from "../state/AuthContext";
-import { centsFromClaim, formatCents, currencyOfClaim } from "../lib/money"; // 👈 added currencyOfClaim
+import { centsFromClaim, formatCents, currencyOfClaim } from "../lib/money";
 import { useDateFilter } from "../state/DateFilterContext";
 import { MONTH_LABELS, getDateFromClaim, inYearMonth } from "../lib/dates";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 const AUTH_TOKEN_KEYS = [
   import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token",
   "access_token",
@@ -45,32 +46,39 @@ async function sniffMime(blob) {
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 && buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
   if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38 && (buf[4] === 0x37 || buf[4] === 0x39) && buf[5] === 0x61) return "image/gif";
   if (buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
-  // 👇 fixed: 0x46 ('F') not 0x03
   if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "image/webp";
   return "";
 }
-// 👇 format using the claim's currency (₹ for INR, RM for MYR)
 const displayAmount = (claim) => formatCents(centsFromClaim(claim), currencyOfClaim(claim));
 const formatDate = (ts) => { try { return new Date(ts).toLocaleString(); } catch { return ts || ""; } };
 
+/* ================= Recall helpers ================= */
+/* ================= Recall helpers ================= */
 /* ================= Recall helpers ================= */
 const isRecall = (c) => {
   const s = String(c?.status || "").toUpperCase();
   return (
     s === "RECALLED" ||
     s === "NEEDS_INFO" ||
+    c?.recallActive === true ||
     c?.recallRequired === true ||
+    c?.recall_required === true ||
     c?.recall?.active === true
   );
 };
+
+const needsAttachment = (c) =>
+  !!(c?.recallRequireAttachment || c?.recall_require_attachment || c?.recall?.requireAttachment);
+
 const recallReasonOf = (c) =>
+  c?.adminComment ||
   c?.recallReason ||
   c?.recall?.reason ||
-  c?.adminComment ||
-  c?.admin_comment ||
   c?.notes ||
   c?.comment ||
   "";
+
+
 
 /* =============== Fullscreen Receipt Preview =============== */
 function FullscreenPreview({ open, preview, onClose }) {
@@ -105,7 +113,7 @@ function FullscreenPreview({ open, preview, onClose }) {
   );
 }
 
-/* =============== Local Pagination (unchanged) =============== */
+/* =============== Local Pagination =============== */
 function LocalPagination({ page, pageSize, total, onPage }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
@@ -151,10 +159,12 @@ function LocalPagination({ page, pageSize, total, onPage }) {
 
 const PAGE_SIZE = 4;
 
-/* =============== Resubmit Modal (new) =============== */
+/* =============== Resubmit Modal =============== */
 function ResubmitModal({ open, onClose, claim, onResubmit, busy }) {
   const [comment, setComment] = useState("");
   const [file, setFile] = useState(null);
+  const needsFile = needsAttachment(claim);
+
 
   useEffect(() => { if (open) { setComment(""); setFile(null); } }, [open]);
 
@@ -166,8 +176,36 @@ function ResubmitModal({ open, onClose, claim, onResubmit, busy }) {
            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
         <div className="text-lg font-semibold mb-2">Fix &amp; Resubmit</div>
         <div className="text-sm mb-3" style={{ color: "color-mix(in oklch, var(--foreground) 70%, transparent)" }}>
-          Please address the admin’s comments and optionally attach supporting file(s).
+          {needsFile
+            ? "The admin requires an attachment. Please upload the file and add any notes."
+            : "Please address the admin’s comments. You can attach an updated receipt if needed."}
         </div>
+
+        <label className={`block text-sm mb-4 ${needsFile ? "" : "hidden"}`}>
+          <span>Required attachment</span>
+          <input
+            type="file"
+            onChange={(e)=>setFile(e.target.files?.[0] || null)}
+            className="block w-full mt-1 text-sm file:mr-3 file:rounded-md file:border file:px-3 file:py-1.5"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*,application/pdf"
+            required={needsFile}
+          />
+          <div className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+            Images, PDF, Office docs, txt, csv. Max 10MB.
+          </div>
+        </label>
+
+        {!needsFile && (
+          <label className="block text-sm mb-4">
+            <span>(Optional) Attachment</span>
+            <input
+              type="file"
+              onChange={(e)=>setFile(e.target.files?.[0] || null)}
+              className="block w-full mt-1 text-sm file:mr-3 file:rounded-md file:border file:px-3 file:py-1.5"
+              accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*,application/pdf"
+            />
+          </label>
+        )}
 
         <label className="block text-sm mb-3">
           <span>Comment to admin</span>
@@ -178,21 +216,7 @@ function ResubmitModal({ open, onClose, claim, onResubmit, busy }) {
             value={comment}
             onChange={(e)=>setComment(e.target.value)}
             placeholder="Add a brief explanation or details…"
-            required
           />
-        </label>
-
-        <label className="block text-sm mb-4">
-          <span>Attachment (optional)</span>
-          <input
-            type="file"
-            onChange={(e)=>setFile(e.target.files?.[0] || null)}
-            className="block w-full mt-1 text-sm file:mr-3 file:rounded-md file:border file:px-3 file:py-1.5"
-            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*,application/pdf"
-          />
-          <div className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
-            Images, PDF, Office docs, txt, csv. Max 10MB.
-          </div>
         </label>
 
         <div className="flex justify-end gap-2">
@@ -217,6 +241,7 @@ function ResubmitModal({ open, onClose, claim, onResubmit, busy }) {
 
 /* ======================= Page ======================= */
 export default function PendingClaims() {
+  const navigate = useNavigate();
   const { pending: pendingRaw = [], loading, refresh } = useClaims();
   const auth = useAuth();
   const { year, month, setYear, setMonth } = useDateFilter();
@@ -226,10 +251,13 @@ export default function PendingClaims() {
   const [hasReceiptMap, setHasReceiptMap] = useState({});
   const [preview, setPreview] = useState({ open: false, url: "", contentType: "", filename: "", supported: false, claimId: null });
 
-  // NEW: resubmit modal state
+  // Resubmit modal state
   const [resubmitOpen, setResubmitOpen] = useState(false);
   const [resubmitClaim, setResubmitClaim] = useState(null);
   const [resubmitBusy, setResubmitBusy] = useState(false);
+
+  // NEW: recall panel toggle
+  const [showRecallsOnly, setShowRecallsOnly] = useState(false);
 
   const didInitRef = useRef(false);
   useEffect(() => {
@@ -253,11 +281,18 @@ export default function PendingClaims() {
 
   const filtered = useMemo(() => (pendingRaw || []).filter(inYearMonth(year, month)), [pendingRaw, year, month]);
 
-  const total = filtered.length;
+  // Recalled counts
+  const recallCountFiltered = useMemo(() => filtered.filter(isRecall).length, [filtered]);
+  const filteredList = useMemo(
+    () => (showRecallsOnly ? filtered.filter(isRecall) : filtered),
+    [filtered, showRecallsOnly]
+  );
+
+  const total = filteredList.length;
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    return filteredList.slice(start, start + PAGE_SIZE);
+  }, [filteredList, page]);
 
   useEffect(() => {
     const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -352,51 +387,70 @@ export default function PendingClaims() {
     } finally { setOpeningId(null); }
   }
 
-  /* ============== Resubmit handler (new) ============== */
+  /* ============== Resubmit handler (updated) ============== */
   async function handleResubmit({ comment, file }) {
     if (!resubmitClaim?.id && !resubmitClaim?.claimId) return;
     const id = resubmitClaim.id ?? resubmitClaim.claimId;
+    const needsFile = needsAttachment(resubmitClaim);
+
     setResubmitBusy(true);
     try {
       const headers = await authHeaders();
 
-      // 1) Optional attachment upload (attachments endpoint first; fallback to receipt)
-      if (file) {
+      if (needsFile) {
+        if (!file) {
+          toast("Attachment is required by admin.", { type: "warning" });
+          setResubmitBusy(false);
+          return;
+        }
+        // Upload required attachment (adjust endpoint if your backend differs)
         const fd = new FormData();
         fd.append("file", file);
-        fd.append("kind", "RECALL_EVIDENCE"); // harmless if backend ignores
-
-        let uploaded = false;
-        try {
-          const r1 = await fetch(`${API_BASE_URL}/api/claims/${id}/attachments`, {
-            method: "POST", headers, body: fd, credentials: "include",
+        const upRes = await fetch(`${API_BASE_URL}/api/claims/${id}/attachments/missing`, {
+          method: "POST", headers, body: fd, credentials: "include",
+        });
+        if (!upRes.ok) {
+          const t = await upRes.text().catch(() => "");
+          throw new Error(t || "Attachment upload failed");
+        }
+        // Optional comment
+        if (comment && comment.trim()) {
+          const r = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
+            method: "PATCH",
+            headers: { ...(headers || {}), "Content-Type": "application/json" },
+            body: JSON.stringify({ comment }),
+            credentials: "include",
           });
-          if (r1.ok) uploaded = true;
-        } catch {/* ignore and fallback */}
-
-        if (!uploaded) {
-          try {
-            const r2 = await fetch(`${API_BASE_URL}/api/claims/${id}/receipt`, {
-              method: "POST", headers, body: fd, credentials: "include",
-            });
-            if (!r2.ok) throw new Error("Attachment upload failed");
-            uploaded = true;
-          } catch (e) {
-            toast(e.message || "Attachment upload failed; continuing without file", { type: "warning" });
+          if (!r.ok) {
+            const t = await r.text().catch(() => "");
+            throw new Error(t || "Could not submit comment");
           }
         }
-      }
-
-      // 2) Resubmit
-      const r = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
-        method: "PATCH",
-        headers: { ...(headers || {}), "Content-Type": "application/json" },
-        body: JSON.stringify({ comment }),
-        credentials: "include",
-      });
-      if (!r.ok) {
-        const t = await r.text().catch(() => "");
-        throw new Error(t || "Resubmit failed");
+      } else {
+        // No mandatory file: JSON-only or multipart
+        if (file) {
+          const fd = new FormData();
+          fd.append("comment", comment || "");
+          fd.append("file", file);
+          const r = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
+            method: "PATCH", headers, body: fd, credentials: "include",
+          });
+          if (!r.ok) {
+            const t = await r.text().catch(() => "");
+            throw new Error(t || "Resubmit (with file) failed");
+          }
+        } else {
+          const r = await fetch(`${API_BASE_URL}/api/claims/${id}/resubmit`, {
+            method: "PATCH",
+            headers: { ...(headers || {}), "Content-Type": "application/json" },
+            body: JSON.stringify({ comment }),
+            credentials: "include",
+          });
+          if (!r.ok) {
+            const t = await r.text().catch(() => "");
+            throw new Error(t || "Resubmit failed");
+          }
+        }
       }
 
       toast("Claim resubmitted to admin 🎉", { type: "success" });
@@ -432,6 +486,30 @@ export default function PendingClaims() {
         </div>
       </div>
 
+      {/* ===== Recall Panel (summary + toggle) ===== */}
+      {recallCountFiltered > 0 && (
+        <div className="rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+             style={{ borderColor: "var(--border)", background: "color-mix(in oklch, var(--destructive) 10%, transparent)" }}>
+          <div className="text-sm">
+            <span className="font-semibold" style={{ color: "var(--destructive)" }}>
+              {recallCountFiltered} claim{recallCountFiltered > 1 ? "s" : ""} need your action
+            </span>
+            <span className="ml-2" style={{ color: "color-mix(in oklch, var(--foreground) 80%, transparent)" }}>
+              (see “Admin comments” below each card)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-3 py-1.5 rounded-md border text-sm"
+              style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+              onClick={() => setShowRecallsOnly((v) => !v)}
+            >
+              {showRecallsOnly ? "Show all pending" : "Show recalls only"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && <p style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Loading…</p>}
       {!loading && total === 0 && <p style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>No pending claims for this window.</p>}
 
@@ -442,7 +520,7 @@ export default function PendingClaims() {
               const id = c.id ?? c.claimId;
               const canView = hasReceiptFor(c);
               const createdTs = c.createdAt || c.updatedAt;
-              const code = currencyOfClaim(c); // 👈 INR or MYR
+              const code = currencyOfClaim(c);
               const recalled = isRecall(c);
               const reason = recallReasonOf(c);
 
@@ -487,7 +565,6 @@ export default function PendingClaims() {
                     </div>
                     <div>
                       <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Amount</div>
-                      {/* 👇 shows ₹ or RM, and the code tag */}
                       <div className="font-medium">
                         {displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span>
                       </div>
@@ -506,10 +583,27 @@ export default function PendingClaims() {
                         </div>
                         <div className="text-sm mb-3" style={{ color: "var(--foreground)" }}>
                           {reason || "Additional information required."}
+                          {needsAttachment(c) && (
+                            <span className="ml-2 inline-block px-2 py-0.5 rounded text-xs"
+                                  style={{ background: "var(--warning)", color: "black" }}>
+                              attachment required
+                            </span>
+                          )}
                         </div>
-                        <div className="flex justify-end">
+
+                        <div className="flex flex-wrap gap-2 justify-end">
+                          {needsAttachment(c) && (
+                            <button
+                              className="px-3 py-1.5 rounded-md border cursor-pointer"
+                              style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+                              onClick={() => navigate(`/claims/${c?.id || c?.claimId}/edit`)}
+                              title="Edit claim details"
+                            >
+                              Edit
+                            </button>
+                          )}
                           <button
-                            className="px-3 py-1.5 rounded-md"
+                            className="px-3 py-1.5 rounded-md cursor-pointer"
                             style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                             onClick={() => { setResubmitClaim(c); setResubmitOpen(true); }}
                           >
@@ -528,7 +622,7 @@ export default function PendingClaims() {
         </>
       )}
 
-      {/* Fullscreen receipt viewer (Admin-style) */}
+      {/* Fullscreen receipt viewer */}
       <FullscreenPreview open={preview.open} preview={preview} onClose={() => {
         if (preview.url) URL.revokeObjectURL(preview.url);
         setPreview({ open:false, url:"", contentType:"", filename:"", supported:false, claimId:null });

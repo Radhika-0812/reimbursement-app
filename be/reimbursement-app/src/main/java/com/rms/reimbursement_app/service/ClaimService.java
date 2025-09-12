@@ -2,6 +2,7 @@
 package com.rms.reimbursement_app.service;
 
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
+import com.rms.reimbursement_app.dto.UpdateClaimRequest;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
 import com.rms.reimbursement_app.repository.ClaimRepository;
@@ -17,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
@@ -57,7 +59,7 @@ public class ClaimService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required");
             }
 
-            Long amountCents = in.getAmountCents(); // ✅ only this exists on DTO
+            Long amountCents = in.getAmountCents();
             if (amountCents == null || amountCents <= 0L) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountCents must be > 0");
             }
@@ -154,31 +156,59 @@ public class ClaimService {
 
     // ===================== Recall Flow =====================
 
-    /** Admin starts recall: flag it and move claim into PENDING for re-review. */
+    /**
+     * Admin starts recall with a reason.
+     * If requireAttachment=true, user will see Edit UI and must attach receipt before resubmit.
+     * Status becomes RECALLED (backend source of truth).
+     */
     @Transactional
-    public Claim adminStartRecall(Long id, String reason) {
+    public Claim adminStartRecall(Long id, String reason, boolean requireAttachment) {
         if (reason == null || reason.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Recall reason required");
         }
-        var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
+        var c = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
 
-        // From APPROVED/REJECTED/PENDING → PENDING w/ recallActive
         c.setRecallActive(true);
         c.setRecallReason(reason.trim());
+        c.setRecallRequireAttachment(requireAttachment);
         c.setResubmitComment(null);
-        c.setStatus(ClaimStatus.PENDING);
+        c.setRecalledAt(Instant.now());
+        c.setStatus(ClaimStatus.RECALLED); // 🔑 RECALLED state
         return repo.save(c);
     }
 
-    /** Admin cancels recall: clear the flag. */
+    /**
+     * Admin explicitly requests attachment (shorthand using repository query).
+     * Equivalent to adminStartRecall(id, note, true) + adminComment.
+     */
+    @Transactional
+    public Claim adminRequestAttachment(Long id, String note) {
+        if (note == null || note.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Attachment request note required");
+        }
+        int updated = repo.markNeedAttachment(id, note.trim(), note.trim(), Instant.now());
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found or not updatable");
+        }
+        return repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found after update"));
+    }
+
+    /** Admin cancels recall: clear the flags; status moves back to PENDING. */
     @Transactional
     public Claim adminCancelRecall(Long id) {
         var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
         c.setRecallActive(false);
+        c.setRecallReason(null);
+        c.setRecallRequireAttachment(false);
+        c.setStatus(ClaimStatus.PENDING);
         return repo.save(c);
     }
 
-    /** User resubmits after recall. Optional file + comment. Leaves status=PENDING for admin to decide. */
+    /**
+     * User resubmits after recall. Optional file + comment.
+     * Clears recall flags and keeps status PENDING (admin will re-review).
+     */
     @Transactional
     public Claim resubmit(Long claimId, Long currentUserId, String resubmitComment, MultipartFile optionalFile)
             throws IOException {
@@ -189,8 +219,8 @@ public class ClaimService {
                     exists ? "Not your claim" : "Claim not found");
         });
 
-        if (!Boolean.TRUE.equals(c.isRecallActive())) {
-            // If not in recall, just return as-is (or throw 409 if you prefer strict behavior)
+        if (!c.isRecallActive()) {
+            // Not in recall mode → no-op
             return c;
         }
 
@@ -201,16 +231,79 @@ public class ClaimService {
             c.setResubmitComment(resubmitComment.trim());
         }
 
+        // Clear recall flags + set status back to PENDING
         c.setRecallActive(false);
+        c.setRecallReason(null);
+        c.setRecallRequireAttachment(false);
+        c.setResubmittedAt(Instant.now());
         c.setStatus(ClaimStatus.PENDING);
         return repo.save(c);
     }
 
-    /** ✅ Alias so controllers that call resubmitAfterRecall(...) compile. */
+    /** Alias for controllers. */
     @Transactional
     public Claim resubmitAfterRecall(Long claimId, Long currentUserId, MultipartFile optionalFile, String resubmitComment)
             throws IOException {
         return resubmit(claimId, currentUserId, resubmitComment, optionalFile);
+    }
+
+    /**
+     * ✅ User can edit details ONLY when:
+     *  - status = RECALLED
+     *  - recallActive = true
+     *  - recallRequireAttachment = true
+     */
+    @Transactional
+    public Claim updateClaimAsUser(Long claimId, Long currentUserId, UpdateClaimRequest req) {
+        final Claim c = repo.findByIdAndUserId(claimId, currentUserId).orElseThrow(() -> {
+            boolean exists = repo.existsById(claimId);
+            return new ResponseStatusException(exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
+                    exists ? "Not your claim" : "Claim not found");
+        });
+
+        boolean editable = c.getStatus() == ClaimStatus.RECALLED
+                && c.isRecallActive()
+                && c.isRecallRequireAttachment();
+
+        if (!editable) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Claim not editable in current state");
+        }
+
+        // Apply safe updates via domain helper
+        c.applyUserEditDuringRecall(
+                req.getTitle(),
+                req.getAmountCents(),
+                req.getDescription(),
+                req.getClaimDate(),
+                req.getCurrencyCode(),
+                req.getClaimType()
+        );
+
+        return repo.save(c);
+    }
+
+    /**
+     * ✅ NEW: User leaves a change-request message for admin (no status change).
+     * Stores message in resubmitComment and updates resubmittedAt for visibility.
+     */
+    @Transactional
+    public void createUserChangeRequest(Long claimId, Long userId, String message) {
+        if (message == null || message.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Change request message required");
+        }
+
+        var c = repo.findByIdAndUserId(claimId, userId).orElseThrow(() -> {
+            boolean exists = repo.existsById(claimId);
+            return new ResponseStatusException(
+                    exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
+                    exists ? "Not your claim" : "Claim not found"
+            );
+        });
+
+        c.setResubmitComment(message.trim());
+        c.setResubmittedAt(Instant.now());
+        // Do NOT change status here; admin decides next action.
+        repo.save(c);
     }
 
     // ===================== Receipt Upload / Download =====================
@@ -276,7 +369,6 @@ public class ClaimService {
         );
     }
 
-    /** Simple existence probe if you wire a HEAD endpoint elsewhere. */
     @Transactional(readOnly = true)
     public boolean receiptExists(Long claimId) {
         var c = repo.findById(claimId).orElse(null);
@@ -299,7 +391,8 @@ public class ClaimService {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported file type: " + ct);
         }
         if (file.getSize() > MAX_UPLOAD_BYTES) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "File too large (max %d bytes)".formatted(MAX_UPLOAD_BYTES));
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "File too large (max %d bytes)".formatted(MAX_UPLOAD_BYTES));
         }
 
         claim.setReceiptFile(file.getBytes());

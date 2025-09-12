@@ -33,10 +33,10 @@ public class SecurityConfig {
                 .cors(c -> c.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // allow CORS preflight
+                        // CORS preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 🔓 Open endpoints (both /auth/** and /api/auth/** just in case)
+                        // Open endpoints
                         .requestMatchers(
                                 "/auth/**",
                                 "/api/auth/**",
@@ -45,7 +45,19 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"
                         ).permitAll()
 
-                        // Role-protected
+                        // (Optional) make the specific admin endpoints obvious in code reviews
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/claims/*/request-attachment").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/claims/*/recall").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/claims/*/recall/cancel").hasRole("ADMIN")
+
+                        // (Optional) user endpoints made explicit (already covered by /api/claims/** below)
+                        .requestMatchers(HttpMethod.PATCH, "/api/claims/*/resubmit").hasAnyRole("USER","ADMIN")
+                        .requestMatchers(HttpMethod.POST,  "/api/claims/*/change-request").hasAnyRole("USER","ADMIN")
+                        .requestMatchers(HttpMethod.POST,  "/api/claims/*/receipt").hasAnyRole("USER","ADMIN")
+                        .requestMatchers(HttpMethod.GET,   "/api/claims/*/receipt").hasAnyRole("USER","ADMIN")
+                        .requestMatchers(HttpMethod.HEAD,  "/api/claims/*/receipt").hasAnyRole("USER","ADMIN")
+
+                        // Broad guards (cover everything else under these prefixes)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/claims/**").hasAnyRole("USER","ADMIN")
 
@@ -68,16 +80,19 @@ public class SecurityConfig {
         return (Jwt jwt) -> {
             Collection<GrantedAuthority> authorities = new ArrayList<>();
 
+            // Map scopes
             JwtGrantedAuthoritiesConverter scopes = new JwtGrantedAuthoritiesConverter();
             scopes.setAuthorityPrefix("SCOPE_");
             scopes.setAuthoritiesClaimName(jwt.hasClaim("scope") ? "scope" : "scp");
             authorities.addAll(scopes.convert(jwt));
 
+            // Map single role
             String role = jwt.getClaimAsString("role");
             if (role != null && !role.isBlank()) {
                 authorities.add(new SimpleGrantedAuthority(ensureRolePrefix(role)));
             }
 
+            // Map roles array
             List<String> roles = jwt.getClaimAsStringList("roles");
             if (roles != null) {
                 for (String r : roles) {
@@ -87,6 +102,7 @@ public class SecurityConfig {
                 }
             }
 
+            // Keycloak-style realm_access.roles
             Map<String, Object> realmAccess = jwt.getClaim("realm_access");
             if (realmAccess != null) {
                 Object r = realmAccess.get("roles");
@@ -99,6 +115,7 @@ public class SecurityConfig {
                 }
             }
 
+            // Use sub as principal name; controllers read uid from claim directly
             return new JwtAuthenticationToken(jwt, authorities, jwt.getSubject());
         };
     }
@@ -116,7 +133,7 @@ public class SecurityConfig {
                 "http://127.0.0.1:*",
                 "https://reimbursementapp.makingmindstechnologies.com"
         ));
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS","HEAD"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setExposedHeaders(List.of("Location", "Authorization"));
         cfg.setAllowCredentials(true);

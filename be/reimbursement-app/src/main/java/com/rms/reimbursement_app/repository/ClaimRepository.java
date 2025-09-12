@@ -62,4 +62,43 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
            where c.id = :id
            """)
     int clearReceiptById(@Param("id") Long id);
+
+    // ------- Recall / Attachment workflow -------
+
+    /**
+     * Admin marks a claim as needing attachment (recall).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+           update Claim c
+           set c.recallActive = true,
+               c.recallRequireAttachment = true,
+               c.recallReason = :reason,
+               c.adminComment = :note,
+               c.status = com.rms.reimbursement_app.domain.ClaimStatus.RECALLED,
+               c.recalledAt = :ts
+           where c.id = :claimId
+           """)
+    int markNeedAttachment(@Param("claimId") Long claimId,
+                           @Param("reason") String reason,
+                           @Param("note") String note,
+                           @Param("ts") Instant ts);
+
+    /**
+     * User uploads attachment → clear recall flags, back to PENDING.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+           update Claim c
+           set c.recallActive = false,
+               c.recallRequireAttachment = false,
+               c.recallReason = null,
+               c.status = com.rms.reimbursement_app.domain.ClaimStatus.PENDING,
+               c.resubmittedAt = :ts,
+               c.resubmitComment = :comment
+           where c.id = :claimId
+           """)
+    int clearNeedAttachment(@Param("claimId") Long claimId,
+                            @Param("comment") String comment,
+                            @Param("ts") Instant ts);
 }

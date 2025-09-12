@@ -1,65 +1,94 @@
 package com.rms.reimbursement_app.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.rms.reimbursement_app.domain.*;
-import lombok.*;
-import java.math.BigDecimal;
-import java.sql.Struct;
+import com.rms.reimbursement_app.domain.Claim;
+import com.rms.reimbursement_app.domain.ClaimStatus;
+import com.rms.reimbursement_app.domain.ClaimType;
+import com.rms.reimbursement_app.domain.CurrencyCode;
+
 import java.time.Instant;
 import java.time.LocalDate;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class ClaimResponse {
+
     private Long id;
     private Long userId;
     private String userName;
-    private String title;
     private String userEmail;
+
+    private String title;
+    private LocalDate claimDate;
     private Long amountCents;
     private CurrencyCode currencyCode;
-    private BigDecimal amountRupees;
     private ClaimType claimType;
     private String description;
+
     private String receiptUrl;
+    private boolean hasReceipt;
+
     private ClaimStatus status;
+
+    // Recall-related
+    private boolean recallActive;
+    private boolean recallRequireAttachment;
+    private String recallReason;
+    private Instant recalledAt;
+    private Instant resubmittedAt;
+
     private String adminComment;
-    private LocalDate claimDate;
     private Instant createdAt;
     private Instant updatedAt;
-    private String designation;
-    private boolean hasReceipt;        // <- FE uses this to show/hide "View receipt"
 
     public static ClaimResponse from(Claim c) {
-        boolean hasReceipt = (c.getReceiptSize() != null && c.getReceiptSize() > 0)
-                || (c.getReceiptFile() != null && c.getReceiptFile().length > 0);
+        ClaimResponse r = new ClaimResponse();
+        r.id = c.getId();
+        r.userId = c.getUserId();
+        r.userName = c.getUserName();
+        r.userEmail = c.getUserEmail();
 
-        return ClaimResponse.builder()
-                .id(c.getId())
-                .userId(c.getUserId())
-                .userName(c.getUserName())
-                .title(c.getTitle())
-                .userEmail(c.getUserEmail())
-                .amountCents(c.getAmountCents())
-                .currencyCode(c.getCurrencyCode())
-                .amountRupees(centsToRupees(c.getAmountCents()))
-                .claimType(c.getClaimType())
-                .description(c.getDescription())
-                .receiptUrl(c.getReceiptUrl())
-                .status(c.getStatus())
-                .adminComment(c.getAdminComment())
-                .claimDate(c.getClaimDate())
-                .createdAt(c.getCreatedAt())
-                .updatedAt(c.getUpdatedAt())
-                .designation(c.getDesignation())
-                .hasReceipt(hasReceipt)
-                .build();
+        r.title = c.getTitle();
+        r.claimDate = c.getClaimDate();
+        r.amountCents = c.getAmountCents();
+        r.currencyCode = c.getCurrencyCode();
+        r.claimType = c.getClaimType();
+        r.description = c.getDescription();
+
+        r.receiptUrl = c.getReceiptUrl();
+        r.hasReceipt = c.getHasReceipt();
+
+        r.status = c.getStatus();
+
+        r.recallActive = c.isRecallActive();
+        r.recallRequireAttachment = c.isRecallRequireAttachment();
+        r.recallReason = c.getRecallReason();
+        r.recalledAt = c.getRecalledAt();
+        r.resubmittedAt = c.getResubmittedAt();
+
+        r.adminComment = c.getAdminComment();
+        r.createdAt = c.getCreatedAt();
+        r.updatedAt = c.getUpdatedAt();
+        return r;
     }
 
-    private static BigDecimal centsToRupees(Long cents) {
-        if (cents == null) return BigDecimal.ZERO;
-        return BigDecimal.valueOf(cents, 2); // divide by 100 with scale=2
-    }
+    // getters (generate if you prefer Lombok)
+    public Long getId() { return id; }
+    public Long getUserId() { return userId; }
+    public String getUserName() { return userName; }
+    public String getUserEmail() { return userEmail; }
+    public String getTitle() { return title; }
+    public LocalDate getClaimDate() { return claimDate; }
+    public Long getAmountCents() { return amountCents; }
+    public CurrencyCode getCurrencyCode() { return currencyCode; }
+    public ClaimType getClaimType() { return claimType; }
+    public String getDescription() { return description; }
+    public String getReceiptUrl() { return receiptUrl; }
+    public boolean isHasReceipt() { return hasReceipt; }
+    public ClaimStatus getStatus() { return status; }
+    public boolean isRecallActive() { return recallActive; }
+    public boolean isRecallRequireAttachment() { return recallRequireAttachment; }
+    public String getRecallReason() { return recallReason; }
+    public Instant getRecalledAt() { return recalledAt; }
+    public Instant getResubmittedAt() { return resubmittedAt; }
+    public String getAdminComment() { return adminComment; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

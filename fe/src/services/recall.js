@@ -70,18 +70,10 @@ export async function adminRecallClaim(claimId, { reason, requireAttachment } = 
   const r = (reason || "").trim();
   if (!r) throw new Error("Reason is required");
 
-  if (requireAttachment) {
-    // Bounce back and require user to upload a file
-    return request("PATCH", `/api/admin/claims/${id}/request-attachment`, {
-      json: { note: r },
-    });
-  } else {
-    // Recall without forcing an attachment
-    return request("PATCH", `/api/admin/claims/${id}/recall`, {
-      json: { reason: r },
-    });
-  }
-}
+  // Use the single /recall endpoint that accepts { reason, requireAttachment }
+  return request("PATCH", `/api/admin/claims/${id}/recall`, {
+    json: { reason: r, requireAttachment: !!requireAttachment },
+  });}
 
 /** Admin (optional): upload a reference/spec file to the claim
  *  This uses the standard receipt endpoint and accepts any allowed content type.

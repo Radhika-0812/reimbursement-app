@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "../lib/toast";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 
 function getAuth() {
   const keys = [import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token", "access_token", "token"];

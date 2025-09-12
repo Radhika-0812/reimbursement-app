@@ -6,10 +6,10 @@ import { toast } from "../lib/toast";
 import { centsFromClaim, formatCents, currencyOfClaim } from "../lib/money";
 import { useDateFilter } from "../state/DateFilterContext";
 import { MONTH_LABELS, getDateFromClaim, inYearMonth } from "../lib/dates";
-import RecallRespondDialog from "../components/RecallRespondDialog"; // 👈 user recall dialog
+import RecallRespondDialog from "../components/RecallRespondDialog";
 
 // ---------- Config ----------
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 const AUTH_TOKEN_KEYS = [
   import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token",
   "access_token",
@@ -53,11 +53,14 @@ async function sniffMime(blob) {
 // 👇 Use claim’s currency:
 const displayAmount = (c) => formatCents(centsFromClaim(c), currencyOfClaim(c));
 
-/* ---- Recall helpers (tolerant to API shapes) ---- */
+/* ---- Recall helpers (aligned to backend) ---- */
 const hasRecall = (c) =>
-  c?.recallStatus === "REQUESTED" || c?.recallRequested === true || c?.needsMoreInfo === true;
-const recallReason = (c) => c?.recallReason || c?.recallComment || c?.recall_comment || "Additional information required.";
-const recallRequireAttachment = (c) => !!(c?.recallRequireAttachment || c?.recall_attachment_required);
+  String(c?.status || "").toUpperCase() === "RECALLED" || c?.recallActive === true;
+
+const recallReason = (c) =>
+  c?.adminComment || c?.recallReason || c?.recall?.reason || "Additional information required.";
+
+const recallRequireAttachment = (c) => !!(c?.recallRequireAttachment);
 
 /* ---- Fullscreen viewer ---- */
 function FullscreenPreview({ open, preview, onClose }) {
@@ -152,7 +155,7 @@ export default function ClosedClaims() {
   const [page, setPage] = useState(1);
   const [openingId, setOpeningId] = useState(null);
   const [preview, setPreview] = useState({ open: false, url: "", contentType: "", filename: "", supported: false, claimId: null });
-  const [recallFor, setRecallFor] = useState(null); // 👈 respond modal
+  const [recallFor, setRecallFor] = useState(null); // respond modal
 
   const didInitRef = useRef(false);
   useEffect(() => {
@@ -277,7 +280,9 @@ export default function ClosedClaims() {
           </div>
           <div>
             <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Amount</div>
-            <div className="font-semibold">{displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span></div>
+            <div className="font-semibold">
+              {displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span>
+            </div>
           </div>
 
           {/* Recall banner if requested */}
@@ -314,7 +319,7 @@ export default function ClosedClaims() {
       <div className="rounded-xl border overflow-hidden w-full"
            style={{ borderColor: "var(--border)", borderWidth: 1, background: "var(--background)", color: "var(--foreground)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b"
-             style={{ borderColor: "var(--border)", borderWidth: 0, background: "var(--sidebar)", color: "BLACK" }}>
+             style={{ borderColor: "var(--border)", borderWidth: 0, background: "var(--sidebar)", color: "black" }}>
           <div className="min-w-0">
             <div className="text-xs opacity-70 truncate">Claim #{id}</div>
             <div className="font-medium capitalize truncate">{c.title ?? c.category ?? "—"}</div>
@@ -344,7 +349,9 @@ export default function ClosedClaims() {
           </div>
           <div>
             <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Amount</div>
-            <div className="font-medium">{displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span></div>
+            <div className="font-medium">
+              {displayAmount(c)} <span className="opacity-70 text-[11px]">({code})</span>
+            </div>
           </div>
           <div>
             <div style={{ color: "color-mix(in oklch, var(--foreground) 60%, transparent)" }}>Type</div>
@@ -438,7 +445,6 @@ export default function ClosedClaims() {
       <RecallRespondDialog
         open={!!recallFor}
         claim={recallFor}
-        requireAttachment={recallRequireAttachment(recallFor || {})}
         onClose={() => setRecallFor(null)}
         onDone={() => { toast("Response sent", { type: "success" }); setRecallFor(null); refresh?.(); }}
       />

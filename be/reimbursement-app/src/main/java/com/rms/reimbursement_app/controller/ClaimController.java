@@ -5,8 +5,10 @@ import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.dto.ClaimResponse;
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.dto.PageDto;
+import com.rms.reimbursement_app.dto.UpdateClaimRequest;
 import com.rms.reimbursement_app.service.ClaimService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -97,6 +99,43 @@ public class ClaimController {
                 .toList();
     }
 
+    // ----------------------- Edit during recall (NEW) -----------------------
+
+    /**
+     * User edits claim details ONLY when: status=RECALLED && recallActive && recallRequireAttachment.
+     */
+    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ClaimResponse updateDuringRecall(@PathVariable Long id,
+                                            @AuthenticationPrincipal Jwt jwt,
+                                            @Valid @RequestBody UpdateClaimRequest req) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        var updated = service.updateClaimAsUser(id, userId, req);
+        return ClaimResponse.from(updated);
+    }
+
+    // ----------------------- Missing attachment upload (alias) -----------------------
+
+    @PostMapping(path = "/{id}/attachments/missing", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<UploadResponse> uploadMissingAttachment(@PathVariable Long id,
+                                                                  @AuthenticationPrincipal Jwt jwt,
+                                                                  Authentication authentication,
+                                                                  @RequestParam("file") MultipartFile file) throws Exception {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
+        var saved = service.uploadReceiptForUser(id, userId, isAdmin, file);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new UploadResponse(
+                        saved.getId(),
+                        saved.getReceiptFilename(),
+                        saved.getReceiptContentType(),
+                        saved.getReceiptSize()
+                ));
+    }
+
     // ----------------------- Receipt upload/download (owner-only; admin bypass) -----------------------
 
     /**
@@ -127,14 +166,14 @@ public class ClaimController {
      * HEAD probe for receipt existence (used by PendingClaims page).
      * 200 if exists, 404 if not. Avoids loading the whole blob.
      */
-    @RequestMapping(value = "/api/claims/{id}/receipt", method = RequestMethod.HEAD)
+    @RequestMapping(value = "/{id}/receipt", method = RequestMethod.HEAD)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ResponseEntity<Void> headReceipt(@PathVariable Long id,
                                             @AuthenticationPrincipal Jwt jwt,
                                             Authentication authentication) {
         Long userId = Long.valueOf(jwt.getClaim("uid").toString());
         boolean isAdmin = authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-        // Owner-only logic is enforced inside service.downloadReceiptForUser; for HEAD we can cheaply check:
         boolean exists = service.receiptExists(id);
         return exists ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
@@ -164,9 +203,7 @@ public class ClaimController {
     // ----------------------- Resubmit after recall -----------------------
 
     /**
-     * JSON resubmit (no file). Use when admin recall didn't require an attachment,
-     * or the existing receipt is still valid.
-     *
+     * JSON resubmit (no file).
      * Body: { "comment": "Added taxi bill number to description" }
      */
     @PatchMapping(path = "/{id}/resubmit", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -194,6 +231,22 @@ public class ClaimController {
         return ClaimResponse.from(updated);
     }
 
+    // ----------------------- NEW: User change request (no recall button) -----------------------
+
+    /**
+     * Allows a user to request changes without exposing a "recall" control.
+     * Stores the message in resubmitComment for admin visibility.
+     */
+    @PostMapping("/{id}/change-request")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<Void> createChangeRequest(@PathVariable Long id,
+                                                    @AuthenticationPrincipal Jwt jwt,
+                                                    @Valid @RequestBody ChangeRequest body) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        service.createUserChangeRequest(id, userId, body.message());
+        return ResponseEntity.ok().build();
+    }
+
     // ----------------------- Helpers -----------------------
 
     private static PageDto<ClaimResponse> paginate(List<ClaimResponse> all, int page, int size) {
@@ -212,4 +265,7 @@ public class ClaimController {
 
     // JSON request for resubmit
     public record ResubmitRequest(@Size(max = 2000) String comment) {}
+
+    // JSON request for change-request
+    public record ChangeRequest(@NotBlank @Size(max = 2000) String message) {}
 }
