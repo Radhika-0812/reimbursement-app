@@ -262,19 +262,25 @@ public class ClaimService {
     public Claim updateClaimAsUser(Long claimId, Long currentUserId, UpdateClaimRequest req) {
         final Claim c = repo.findByIdAndUserId(claimId, currentUserId).orElseThrow(() -> {
             boolean exists = repo.existsById(claimId);
-            return new ResponseStatusException(exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
-                    exists ? "Not your claim" : "Claim not found");
+            return new ResponseStatusException(
+                    exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
+                    exists ? "Not your claim" : "Claim not found"
+            );
         });
 
-        boolean editable = c.getStatus() == ClaimStatus.RECALLED
-                && c.isRecallActive()
-                && c.isRecallRequireAttachment();
+        // ✅ Allow edit while PENDING, or while in an active recall
+        boolean canEdit =
+                c.getStatus() == ClaimStatus.PENDING ||
+                        (c.getStatus() == ClaimStatus.RECALLED && Boolean.TRUE.equals(c.isRecallActive()));
 
-        if (!editable) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Claim not editable in current state");
+        if (!canEdit) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "You can only edit a claim that is Pending or in active Recall"
+            );
         }
 
-        // Apply safe updates via domain helper
+        // Apply safe updates (keep whatever helper you already have)
         c.applyUserEditDuringRecall(
                 req.getTitle(),
                 req.getAmountCents(),
@@ -284,8 +290,11 @@ public class ClaimService {
                 req.getClaimType()
         );
 
+        // NOTE: Do NOT flip status here. The transition back to PENDING
+        // happens in your /{id}/resubmit endpoints after the user responds.
         return repo.save(c);
     }
+
 
     /**
      * ✅ NEW: User leaves a change-request message for admin (no status change).
