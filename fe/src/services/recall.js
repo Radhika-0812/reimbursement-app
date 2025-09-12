@@ -75,10 +75,7 @@ export async function adminRecallClaim(claimId, { reason, requireAttachment } = 
     json: { reason: r, requireAttachment: !!requireAttachment },
   });}
 
-/** Admin (optional): upload a reference/spec file to the claim
- *  This uses the standard receipt endpoint and accepts any allowed content type.
- *  Field name: "file"
- */
+
 export async function adminUploadRecallAttachment(claimId, file) {
   if (!file) throw new Error("file is required");
   const id = String(claimId);
