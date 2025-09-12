@@ -1064,7 +1064,6 @@ export default function AdminDashboard() {
       />
 
 
-      {/* Recall modal */}
       <RecallDialog
         open={!!recallClaim}
         claim={recallClaim}
