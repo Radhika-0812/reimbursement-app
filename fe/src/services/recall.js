@@ -70,7 +70,6 @@ export async function adminRecallClaim(claimId, { reason, requireAttachment } = 
   const r = (reason || "").trim();
   if (!r) throw new Error("Reason is required");
 
-  // Use the single /recall endpoint that accepts { reason, requireAttachment }
   return request("PATCH", `/api/admin/claims/${id}/recall`, {
     json: { reason: r, requireAttachment: !!requireAttachment },
   });}
