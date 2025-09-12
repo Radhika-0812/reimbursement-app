@@ -22,30 +22,26 @@ const BORDER = FG;          // borders
 const SURFACE = BG;         // surfaces
 
 /* ===== Shared control styling for Year/Month/Refresh ===== */
-const CONTROL_CLS =
-  "h-9 px-3 rounded border text-sm w-[140px] sm:w-[160px]";
-const CONTROL_STYLE = {
-  background: C_EGGSHELL,
-  borderColor: BORDER,
-  borderWidth: 1,
-  color: FG,
-};
+const CONTROL_CLS = "h-9 px-3 rounded border text-sm w-[140px] sm:w-[160px]";
+const CONTROL_STYLE = { background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG };
 
 /* ===== Config ===== */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://reimbursement-app-7wy3.onrender.com";
 const ENDPOINTS = {
-  pending: "/api/admin/claims/pending",
+  pending:  "/api/admin/claims/pending",
+  recalled: "/api/admin/claims/recalled",    // <— NEW
   approved: "/api/admin/claims/approved",
   rejected: "/api/admin/claims/rejected",
   approveTpl: "/api/admin/claims/:id/approve",
-  rejectTpl: "/api/admin/claims/:id/reject",
+  rejectTpl:  "/api/admin/claims/:id/reject",
   adminExport: "/api/admin/claims/export",
 };
 const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || "auth_token";
 const PAGE_SIZE = 10;
-const STATUS_OPTIONS = ["PENDING", "APPROVED", "REJECTED"];
+const STATUS_OPTIONS = ["PENDING", "RECALLED", "APPROVED", "REJECTED"]; // <— NEW
 const STATUS_TO_ENDPOINT = {
-  PENDING: ENDPOINTS.pending,
+  PENDING:  ENDPOINTS.pending,
+  RECALLED: ENDPOINTS.recalled,  // <— NEW
   APPROVED: ENDPOINTS.approved,
   REJECTED: ENDPOINTS.rejected,
 };
@@ -56,9 +52,7 @@ async function http(method, path, { body, token, headers: extraHeaders } = {}) {
   const url = path.startsWith("http") ? path : API_BASE_URL + path;
   const headers = { ...(extraHeaders || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined && headers["Content-Type"] === undefined) {
-    headers["Content-Type"] = "application/json";
-  }
+  if (body !== undefined && headers["Content-Type"] === undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(url, {
     method,
     headers,
@@ -115,30 +109,17 @@ function extractEmailDeep(obj, depth = 0) {
 }
 function displayUserName(c) {
   return firstNonEmpty(
-    c.userName,
-    c.user_name,
-    c.user?.name,
-    c.user?.fullName,
-    c.user?.username,
-    c.name,
-    c.fullName
+    c.userName, c.user_name, c.user?.name, c.user?.fullName, c.user?.username, c.name, c.fullName
   );
 }
 function displayUserEmail(c) {
   return firstNonEmpty(
-    c.userEmail,
-    c.user_email,
-    c.email,
-    c.user?.email,
-    extractEmailDeep(c)
+    c.userEmail, c.user_email, c.email, c.user?.email, extractEmailDeep(c)
   );
 }
 function displayDesignation(c) {
   return firstNonEmpty(
-    c.designation,
-    c.userDesignation,
-    c.user_designation,
-    c.user?.designation
+    c.designation, c.userDesignation, c.user_designation, c.user?.designation
   );
 }
 function withinRange(dateStr, from, to) {
@@ -149,9 +130,8 @@ function withinRange(dateStr, from, to) {
   if (to && d > new Date(to + "T23:59:59")) return false;
   return true;
 }
-function monthBounds(year, month /* "01".."12" */) {
-  const y = Number(year);
-  const m = Number(month);
+function monthBounds(year, month) {
+  const y = Number(year); const m = Number(month);
   if (!y || !m) return { from: "", to: "" };
   const start = new Date(Date.UTC(y, m - 1, 1));
   const end = new Date(Date.UTC(y, m, 0));
@@ -171,10 +151,8 @@ function mergeEmails(prev, additions) {
 /* ===== KPIs ===== */
 function Kpi({ label, value }) {
   return (
-    <div
-      className="rounded-[1.25rem] border p-4"
-      style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
-    >
+    <div className="rounded-[1.25rem] border p-4"
+         style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}>
       <div className="text-sm" style={{ color: `${FG}B3` }}>{label}</div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
@@ -187,10 +165,8 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
   const title = kind === "approve" ? "Approve this claim?" : "Reject this claim?";
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
-      <div
-        className="max-w-sm w-[360px] border rounded-xl p-4 pointer-events-auto shadow-2xl"
-        style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}
-      >
+      <div className="max-w-sm w-[360px] border rounded-xl p-4 pointer-events-auto shadow-2xl"
+           style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG }}>
         <div className="font-medium text-base">{title}</div>
         {kind === "reject" && comment && (
           <div className="mt-1 text-xs" style={{ color: `${FG}99` }}>
@@ -198,18 +174,12 @@ function ConfirmToast({ open, kind, comment, onConfirm, onCancel }) {
           </div>
         )}
         <div className="mt-3 flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-3 py-1.5 rounded border text-sm cursor-pointer"
-            style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
-          >
+          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm cursor-pointer"
+                  style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}>
             Cancel
           </button>
-          <button
-            onClick={onConfirm}
-            className="px-3 py-1.5 rounded text-sm cursor-pointer"
-            style={{ background: kind === "approve" ? PRI : C_TAUPE, color: PRI_FG }}
-          >
+          <button onClick={onConfirm} className="px-3 py-1.5 rounded text-sm cursor-pointer"
+                  style={{ background: kind === "approve" ? PRI : C_TAUPE, color: PRI_FG }}>
             Confirm
           </button>
         </div>
@@ -229,31 +199,20 @@ function FullscreenPreview({ open, onClose, preview }) {
 
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-2 overflow-y-auto"
-      onClick={onClose}
-      style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
-    >
-      <button
-        aria-label="Close"
-        className="absolute top-4 right-4 px-3 py-2 rounded cursor-pointer"
-        style={{ background: PRI, color: PRI_FG }}
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-      >
+    <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-2 overflow-y-auto"
+         onClick={onClose} style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+      <button aria-label="Close" className="absolute top-4 right-4 px-3 py-2 rounded cursor-pointer"
+              style={{ background: PRI, color: PRI_FG }}
+              onClick={(e) => { e.stopPropagation(); onClose(); }}>
         ✕
       </button>
-
-      <div
-        className="max-w-[95vw] w-full max-h-[92svh] rounded-lg border overflow-auto p-2"
-        style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, WebkitOverflowScrolling: "touch" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="max-w-[95vw] w-full max-h-[92svh] rounded-lg border overflow-auto p-2"
+           style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, WebkitOverflowScrolling: "touch" }}
+           onClick={(e) => e.stopPropagation()}>
         {preview?.supported ? (
-          preview.contentType.includes("pdf") ? (
-            <iframe title="Receipt PDF" src={preview.url} className="w-full h-[85svh] border-0 rounded-lg" />
-          ) : (
-            <img src={preview.url} alt="Receipt" className="block max-w-none rounded-lg" />
-          )
+          preview.contentType.includes("pdf")
+            ? <iframe title="Receipt PDF" src={preview.url} className="w-full h-[85svh] border-0 rounded-lg" />
+            : <img src={preview.url} alt="Receipt" className="block max-w-none rounded-lg" />
         ) : (
           <div className="text-white">Preview not available</div>
         )}
@@ -274,11 +233,8 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
 
   useEffect(() => {
     if (!open) return;
-    setRejectComment("");
-    setRejectNeedsComment(false);
-    setSubmitting(false);
-    setConfirm({ open: false, kind: null });
-    setFull(false);
+    setRejectComment(""); setRejectNeedsComment(false); setSubmitting(false);
+    setConfirm({ open: false, kind: null }); setFull(false);
     setTimeout(() => firstBtnRef.current?.focus(), 50);
   }, [open]);
 
@@ -337,47 +293,40 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
 
   async function confirmAndApprove() {
     setSubmitting(true);
-    try { await onApprove(claim); } finally { setSubmitting(false); setConfirm({ open: false, kind: null }); }
+    try { await onApprove(claim); }
+    finally { setSubmitting(false); setConfirm({ open: false, kind: null }); }
   }
   async function confirmAndReject() {
     const comment = (rejectComment || "").trim();
     if (!comment) { toast("Need comments", { type: "warning" }); return; }
     setSubmitting(true);
-    try { await onReject(claim, comment); } finally { setSubmitting(false); setConfirm({ open: false, kind: null }); }
+    try { await onReject(claim, comment); }
+    finally { setSubmitting(false); setConfirm({ open: false, kind: null }); }
+  }
+
+  function displayUserName(c) {
+    return firstNonEmpty(c.userName, c.user_name, c.user?.name, c.user?.fullName, c.user?.username, c.name, c.fullName);
+  }
+  function displayUserEmail(c) {
+    return firstNonEmpty(c.userEmail, c.user_email, c.email, c.user?.email, extractEmailDeep(c));
+  }
+  function displayDesignation(c) {
+    return firstNonEmpty(c.designation, c.userDesignation, c.user_designation, c.user?.designation);
   }
 
   return (
     <>
-      {/* Overlay is scrollable so large cards never overflow off-screen */}
-      <div
-        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
-        onClick={onClose}
-        style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
-      >
-        {/* The card itself is also scrollable and capped to viewport height */}
-        <div
-          className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-y-auto max-h-[90svh]"
-          style={{
-            background: SURFACE,
-            borderColor: BORDER,
-            borderWidth: 1,
-            color: FG,
-            WebkitOverflowScrolling: "touch",
-            touchAction: "pan-y",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="px-5 py-4 border-b flex items-center justify-between sticky top-0 z-10"
-            style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
-          >
+      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
+           onClick={onClose} style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+        <div className="w-full max-w-4xl rounded-2xl border shadow-xl overflow-y-auto max-h-[90svh]"
+             style={{ background: SURFACE, borderColor: BORDER, borderWidth: 1, color: FG, WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+             onClick={(e) => e.stopPropagation()}>
+          <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0 z-10"
+               style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}>
             <div className="text-lg font-semibold">Claim Details</div>
-            <button
-              className="px-3 py-1 rounded border cursor-pointer"
-              style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
-              onClick={onClose}
-              ref={firstBtnRef}
-            >
+            <button className="px-3 py-1 rounded border cursor-pointer"
+                    style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
+                    onClick={onClose} ref={firstBtnRef}>
               Close
             </button>
           </div>
@@ -400,15 +349,9 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
             </div>
 
             <div className="border rounded-lg overflow-hidden" style={{ borderColor: BORDER, borderWidth: 1 }}>
-              <div className="px-3 py-2 text-sm border-b" style={{ borderColor: BORDER, background: SURFACE, color: FG }}>
-                Receipt
-              </div>
-
-              {/* Scrollable preview area (desktop + mobile) */}
-              <div
-                className="p-3 min-h-64 max-h-[60svh] overflow-auto flex items-center justify-center"
-                style={{ background: C_EGGSHELL, WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
-              >
+              <div className="px-3 py-2 text-sm border-b" style={{ borderColor: BORDER, background: SURFACE, color: FG }}>Receipt</div>
+              <div className="p-3 min-h-64 max-h-[60svh] overflow-auto flex items-center justify-center"
+                   style={{ background: C_EGGSHELL, WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
                 {!preview.has && <div className="text-sm" style={{ color: `${FG}99` }}>No receipt uploaded.</div>}
                 {preview.has && preview.supported && (
                   preview.contentType.includes("pdf")
@@ -421,17 +364,19 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
                       Preview not supported for this file type
                       <span className="block text-xs mt-1">({preview.contentType || "unknown"})</span>
                     </div>
-                    <button onClick={downloadUnsupported} className="px-3 py-2 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}>
+                    <button onClick={downloadUnsupported} className="px-3 py-2 rounded cursor-pointer"
+                            style={{ background: PRI, color: PRI_FG }}>
                       Download file
                     </button>
                   </div>
                 )}
               </div>
-
-              <div className="px-3 py-2 flex items-center justify-between border-t" style={{ color: `${FG}99`, borderColor: BORDER }}>
+              <div className="px-3 py-2 flex items-center justify-between border-t"
+                   style={{ color: `${FG}99`, borderColor: BORDER }}>
                 <div>{preview.supported ? "View-only preview shown. Expand for fullscreen." : "Preview unavailable; download provided."}</div>
                 {preview.has && preview.supported && (
-                  <button className="px-3 py-1.5 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }} onClick={() => setFull(true)}>
+                  <button className="px-3 py-1.5 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}
+                          onClick={() => setFull(true)}>
                     Expand
                   </button>
                 )}
@@ -444,39 +389,14 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
                style={{ borderColor: BORDER, background: SURFACE }}>
             {canAct ? (
               <>
-                <div className="flex-1">
-                  <label className="text-sm" style={{ color: `${FG}CC` }}>Reject reason (required to reject)</label>
-                  <textarea
-                    rows={2}
-                    value={rejectComment}
-                    onChange={(e) => { setRejectComment(e.target.value); if (rejectNeedsComment && e.target.value.trim()) setRejectNeedsComment(false); }}
-                    className="w-full mt-1 p-2 rounded border"
-                    style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}
-                    placeholder="Explain why this claim is rejected"
-                  />
-                  {rejectNeedsComment && !rejectComment.trim() && (
-                    <div className="text-xs mt-1" style={{ color: "#b91c1c" }}>Comment is required to reject.</div>
-                  )}
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button className="px-4 py-2 rounded border cursor-pointer"
-                          style={{ borderColor: BORDER, borderWidth: 1, background: C_EGGSHELL, color: FG }}
-                          onClick={onClose}
-                          disabled={submitting}>
-                    Close
-                  </button>
+                {/* Approve / Reject filled from parent */}
+                <div className="flex gap-2 justify-end w-full">
                   <button className="px-4 py-2 rounded cursor-pointer" style={{ background: PRI, color: PRI_FG }}
-                          onClick={() => setConfirm({ open: true, kind: "approve" })}
-                          disabled={submitting}>
+                          onClick={() => setConfirm({ open: true, kind: "approve" })}>
                     Approve
                   </button>
                   <button className="px-4 py-2 rounded cursor-pointer" style={{ background: C_TAUPE, color: PRI_FG }}
-                          onClick={() => {
-                            const comment = (rejectComment || "").trim();
-                            if (!comment) { setRejectNeedsComment(true); toast("Need comments", { type: "warning" }); return; }
-                            setConfirm({ open: true, kind: "reject" });
-                          }}
-                          disabled={submitting}>
+                          onClick={() => setConfirm({ open: true, kind: "reject" })}>
                     Reject
                   </button>
                 </div>
@@ -496,7 +416,7 @@ function DetailsModal({ open, claim, onClose, onApprove, onReject, token, canAct
         <ConfirmToast
           open={confirm.open}
           kind={confirm.kind}
-          comment={(rejectComment || "").trim()}
+          comment={""}
           onCancel={() => setConfirm({ open: false, kind: null })}
           onConfirm={confirm.kind === "approve" ? confirmAndApprove : confirmAndReject}
         />
@@ -523,12 +443,12 @@ export default function AdminDashboard() {
   // Table state
   const [statusTab, setStatusTab] = useState("PENDING");
   const [rows, setRows] = useState([]);
- const [page, setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [total, setTotal] = useState(0);
 
   // KPIs
-  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [counts, setCounts] = useState({ pending: 0, recalled: 0, approved: 0, rejected: 0 }); // <— NEW
   const [kpiSums, setKpiSums] = useState({ INR: 0, MYR: 0 });
 
   // Detail modal
@@ -557,8 +477,8 @@ export default function AdminDashboard() {
 
   /* ===== KPIs: counts + currency totals honoring filters ===== */
   async function fetchKpis() {
-    const statuses = ["PENDING", "APPROVED", "REJECTED"];
-    const countsAcc = { pending: 0, approved: 0, rejected: 0 };
+    const statuses = ["PENDING", "RECALLED", "APPROVED", "REJECTED"]; // <— include RECALLED
+    const countsAcc = { pending: 0, recalled: 0, approved: 0, rejected: 0 };
     const sums = { INR: 0, MYR: 0 };
     const PAGE_SIZE_FOR_KPI = 200;
 
@@ -588,6 +508,7 @@ export default function AdminDashboard() {
 
         const inc = filtered.length;
         if (s === "PENDING") countsAcc.pending += inc;
+        else if (s === "RECALLED") countsAcc.recalled += inc;
         else if (s === "APPROVED") countsAcc.approved += inc;
         else countsAcc.rejected += inc;
 
@@ -657,9 +578,7 @@ export default function AdminDashboard() {
         }
       }
       setEmailOptions((prev) => mergeEmails(prev, merged));
-    } catch {
-      /* best-effort; ignore */
-    }
+    } catch {/* best-effort */}
   }
 
   /* Download — if email selected, guarantee filtered data via client-side CSV */
@@ -756,7 +675,7 @@ export default function AdminDashboard() {
         if (!token) { setError("Not authenticated. Please sign in as an admin."); toast("Admin auth required", { type: "error" }); return; }
         await fetchKpis();
         await fetchList("PENDING", 1);
-        hydrateEmailOptions(); // best-effort to fill dropdown
+        hydrateEmailOptions();
       } catch (e) {
         setError(e.message || String(e));
         toast(e.message || "Failed to load", { type: "error" });
@@ -826,24 +745,14 @@ export default function AdminDashboard() {
         <div className="flex flex-wrap items-end gap-3" style={{ rowGap: "0.5rem" }}>
           <div className="flex flex-col">
             <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Year</label>
-            <select
-              value={year}
-              onChange={(e)=>setYear(e.target.value)}
-              className={CONTROL_CLS}
-              style={CONTROL_STYLE}
-            >
+            <select value={year} onChange={(e)=>setYear(e.target.value)} className={CONTROL_CLS} style={CONTROL_STYLE}>
               {years.map((y, i) => <option key={i} value={y}>{y || "All"}</option>)}
             </select>
           </div>
 
           <div className="flex flex-col">
             <label className="text-sm mb-1" style={{ color: `${FG}CC` }}>Month</label>
-            <select
-              value={month}
-              onChange={(e)=>setMonth(e.target.value)}
-              className={CONTROL_CLS}
-              style={CONTROL_STYLE}
-            >
+            <select value={month} onChange={(e)=>setMonth(e.target.value)} className={CONTROL_CLS} style={CONTROL_STYLE}>
               {months.map((m) => <option key={m.v || "all"} value={m.v}>{m.n}</option>)}
             </select>
           </div>
@@ -871,6 +780,7 @@ export default function AdminDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         <Kpi label="Pending"  value={counts.pending} />
+        <Kpi label="Recalled" value={counts.recalled} /> {/* NEW */}
         <Kpi label="Approved" value={counts.approved} />
         <Kpi label="Rejected" value={counts.rejected} />
         {kpiSums.INR > 0 && <Kpi label="Total (INR)" value={formatCents(kpiSums.INR, "INR")} />}
@@ -913,9 +823,7 @@ export default function AdminDashboard() {
                   className="rounded px-2 py-1 border"
                   style={{ background: C_EGGSHELL, borderColor: BORDER, borderWidth: 1, color: FG }}>
             <option value="">All</option>
-            <option value="PENDING">Pending</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
@@ -967,9 +875,7 @@ export default function AdminDashboard() {
                 <th className="px-4 py-2 text-left">Title</th>
                 <th className="px-4 py-2 text-left">Amount</th>
                 <th className="px-4 py-2 text-left">Status</th>
-                {statusTab === "REJECTED" && (
-                  <th className="px-4 py-2 text-left">Admin comment</th>
-                )}
+                {statusTab === "REJECTED" && <th className="px-4 py-2 text-left">Admin comment</th>}
                 <th className="px-4 py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -985,7 +891,17 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
                   <td className="px-4 py-2">{c.title}</td>
                   <td className="px-4 py-2">{formatCentsForClaim(c)}</td>
-                  <td className="px-4 py-2">{c.status}</td>
+                  <td className="px-4 py-2">
+                    {c.status}
+                    {c.status === "RECALLED" && c.recallReason && (
+                      <div className="text-xs opacity-70 max-w-[360px] truncate" title={c.recallReason}>
+                        Reason: {c.recallReason}
+                      </div>
+                    )}
+                    {c.status === "RECALLED" && c.recallRequireAttachment && (
+                      <div className="text-[11px] opacity-70">Attachment required</div>
+                    )}
+                  </td>
                   {statusTab === "REJECTED" && (
                     <td className="px-4 py-2 max-w-[360px] truncate" style={{ color: "#b91c1c" }}
                         title={firstNonEmpty(c.adminComment, c.admin_comment) || ""}>
@@ -995,21 +911,17 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2 text-right">
                     <div className="inline-flex gap-2">
                       {(c.status === "APPROVED" || c.status === "REJECTED") && (
-                        <button
-                          className="px-3 py-1 rounded border cursor-pointer"
-                          style={{ background: C_EGGSHELL, borderColor: BORDER, color: FG }}
-                          onClick={() => setRecallClaim(c)}
-                          title="Recall this claim from the user"
-                        >
+                        <button className="px-3 py-1 rounded border cursor-pointer"
+                                style={{ background: C_EGGSHELL, borderColor: BORDER, color: FG }}
+                                onClick={() => setRecallClaim(c)}
+                                title="Recall this claim from the user">
                           Recall
                         </button>
                       )}
-                      <button
-                        className="px-3 py-1 rounded cursor-pointer"
-                        style={{ background: PRI, color: PRI_FG }}
-                        onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
-                        title="Open details & fullscreen preview"
-                      >
+                      <button className="px-3 py-1 rounded cursor-pointer"
+                              style={{ background: PRI, color: PRI_FG }}
+                              onClick={() => { setDetailClaim(c); setDetailOpen(true); }}
+                              title="Open details & fullscreen preview">
                         Expand
                       </button>
                     </div>
@@ -1025,21 +937,17 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div />
             <div>
-              <button
-                className="px-3 py-1 rounded border mr-2 disabled:opacity-50 cursor-pointer"
-                style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
-                onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchList(statusTab, p); }}
-                disabled={page <= 1}
-              >
+              <button className="px-3 py-1 rounded border mr-2 disabled:opacity-50 cursor-pointer"
+                      style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
+                      onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchList(statusTab, p); }}
+                      disabled={page <= 1}>
                 Prev
               </button>
               <span className="text-sm">Page {page} / {pageCount}</span>
-              <button
-                className="px-3 py-1 rounded border ml-2 disabled:opacity-50 cursor-pointer"
-                style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
-                onClick={() => { const p = Math.min(pageCount, page + 1); setPage(p); fetchList(statusTab, p); }}
-                disabled={page >= pageCount}
-              >
+              <button className="px-3 py-1 rounded border ml-2 disabled:opacity-50 cursor-pointer"
+                      style={{ borderColor: BORDER, borderWidth: 1, background: SURFACE, color: FG }}
+                      onClick={() => { const p = Math.min(pageCount, page + 1); setPage(p); fetchList(statusTab, p); }}
+                      disabled={page >= pageCount}>
                 Next
               </button>
             </div>
@@ -1052,7 +960,7 @@ export default function AdminDashboard() {
         open={detailOpen}
         claim={detailClaim}
         token={token}
-        canAct={statusTab === "PENDING"}
+        canAct={statusTab === "PENDING"}  // only allow approve/reject on Pending
         onClose={() => { setDetailOpen(false); setDetailClaim(null); }}
         onApprove={doApprove}
         onReject={doReject}
