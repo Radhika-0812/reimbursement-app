@@ -16,6 +16,7 @@ import ClosedClaims from "./pages/ClosedClaims";
 import Profile from "./pages/Profile";
 import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
+import EditClaim from "./pages/EditClaim";
 
 /** Helpers */
 const isAdminUser = (user) =>
@@ -87,6 +88,7 @@ export default function App() {
                             </RequireAuth>
                           }
                         />
+                        <Route path="/claims/:id/edit" element={<EditClaim />} />
                         <Route
                           path="/pending"
                           element={
