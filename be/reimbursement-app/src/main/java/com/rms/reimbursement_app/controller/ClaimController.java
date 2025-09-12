@@ -1,4 +1,3 @@
-// src/main/java/com/rms/reimbursement_app/controller/ClaimController.java
 package com.rms.reimbursement_app.controller;
 
 import com.rms.reimbursement_app.domain.Claim;
@@ -10,10 +9,9 @@ import com.rms.reimbursement_app.service.ClaimService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -88,7 +86,7 @@ public class ClaimController {
 
     /**
      * Returns the current user's claims that have been recalled by admin.
-     * (Filters your pending list for recallActive=true.)
+     * (Filters pending for recallActive=true.)
      */
     @GetMapping("/me/recall")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
@@ -100,10 +98,82 @@ public class ClaimController {
                 .toList();
     }
 
-    // ----------------------- Edit during recall (NEW) -----------------------
+    // ----------------------- Receipt upload / HEAD / download -----------------------
 
     /**
-     * User edits claim details ONLY when: status=RECALLED && recallActive && recallRequireAttachment.
+     * Upload or replace a receipt file for a claim (owner-only unless ADMIN).
+     * Form field name must be "file".
+     */
+    @PostMapping(path = "/{id}/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<UploadResponse> uploadReceipt(@PathVariable Long id,
+                                                        @AuthenticationPrincipal Jwt jwt,
+                                                        Authentication authentication,
+                                                        @RequestParam("file") MultipartFile file) throws Exception {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
+        var saved = service.uploadReceiptForUser(id, userId, isAdmin, file);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new UploadResponse(
+                        saved.getId(),
+                        saved.getReceiptFilename(),
+                        saved.getReceiptContentType(),
+                        saved.getReceiptSize()
+                ));
+    }
+
+    /**
+     * HEAD probe for receipt existence (cheap check used by FE).
+     * 200 if exists, 404 if not.
+     */
+    @RequestMapping(value = "/{id}/receipt", method = RequestMethod.HEAD)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<Void> headReceipt(@PathVariable Long id) {
+        boolean exists = service.receiptExists(id);
+        return exists ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    /**
+     * Download/preview the stored receipt (owner-only unless ADMIN).
+     * Sets content-type and 'inline' filename so PDFs/images preview in browser.
+     */
+    @GetMapping("/{id}/receipt")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<byte[]> downloadReceipt(@PathVariable Long id,
+                                                  @AuthenticationPrincipal Jwt jwt,
+                                                  Authentication authentication) {
+        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
+        var fileData = service.downloadReceiptForUser(id, userId, isAdmin);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(fileData.contentType()));
+        headers.setContentDisposition(
+                ContentDisposition.inline().filename(fileData.filename()).build()
+        );
+        headers.setContentLength(fileData.bytes().length);
+
+        return new ResponseEntity<>(fileData.bytes(), headers, HttpStatus.OK);
+    }
+
+    // Optional helper you previously had (kept for compatibility)
+    @PostMapping(path = "/{id}/attachments/missing", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<UploadResponse> uploadMissingAttachment(@PathVariable Long id,
+                                                                  @AuthenticationPrincipal Jwt jwt,
+                                                                  Authentication authentication,
+                                                                  @RequestParam("file") MultipartFile file) throws Exception {
+        return uploadReceipt(id, jwt, authentication, file);
+    }
+
+    // ----------------------- Edit during recall -----------------------
+
+    /**
+     * User edits claim details ONLY when: status=RECALLED && recallActive (service enforces).
      */
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
@@ -146,7 +216,7 @@ public class ClaimController {
         return ClaimResponse.from(updated);
     }
 
-    // ----------------------- NEW: User change request (no recall button) -----------------------
+    // ----------------------- User change request (no recall button) -----------------------
 
     /**
      * Allows a user to request changes without exposing a "recall" control.
@@ -174,6 +244,9 @@ public class ClaimController {
         List<ClaimResponse> content = (fromIdx >= total || fromIdx < 0) ? List.of() : all.subList(fromIdx, toIdx);
         return new PageDto<>(content, oneBasedPage, safeSize, total, totalPages);
     }
+
+    // Small response payload for upload endpoint(s)
+    public record UploadResponse(Long claimId, String filename, String contentType, Long size) {}
 
     // JSON request for resubmit
     public record ResubmitRequest(@Size(max = 2000) String comment) {}

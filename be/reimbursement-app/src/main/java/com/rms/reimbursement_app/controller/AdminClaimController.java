@@ -115,7 +115,7 @@ public class AdminClaimController {
         var mapped = page.getContent().stream().map(AdminClaimView::from).toList();
         return new PageImpl<>(mapped, safe, page.getTotalElements());
     }
-    
+
     @GetMapping("/rejected")
     @PreAuthorize("hasRole('ADMIN')")
     public Page<AdminClaimView> getAllRejected(@PageableDefault(size = 20) Pageable pageable,
