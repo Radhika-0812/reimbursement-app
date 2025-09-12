@@ -31,37 +31,37 @@ public class ReceiptController {
      * User uploads the missing attachment after admin recall.
      * Endpoint: POST /api/claims/{id}/attachments/missing
      */
-    @PostMapping(path = "/{id}/attachments/missing", consumes = "multipart/form-data")
-    @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<Void> uploadMissingAttachment(@PathVariable Long id,
-                                                        @AuthenticationPrincipal Jwt jwt,
-                                                        @RequestPart("file") @NotNull MultipartFile file)
-            throws IOException {
-
-        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
-        Claim claim = claimRepository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found or not owned by you"));
-
-        if (!claim.isRecallRequireAttachment()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This claim does not require an attachment");
-        }
-
-        if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
-        }
-
-        // Store directly in claim (in your current design receipts are inline on Claim)
-        claim.setReceiptFile(file.getBytes());
-        claim.setReceiptFilename(file.getOriginalFilename());
-        claim.setReceiptContentType(file.getContentType());
-        claim.setReceiptSize(file.getSize());
-
-        // Clear recall requirement → back to pending
-        claim.clearRecall("Attachment provided by user");
-
-        claimRepository.save(claim);
-        return ResponseEntity.ok().build();
-    }
+//    @PostMapping(path = "/{id}/attachments/missing", consumes = "multipart/form-data")
+//    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+//    public ResponseEntity<Void> uploadMissingAttachment(@PathVariable Long id,
+//                                                        @AuthenticationPrincipal Jwt jwt,
+//                                                        @RequestPart("file") @NotNull MultipartFile file)
+//            throws IOException {
+//
+//        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
+//        Claim claim = claimRepository.findByIdAndUserId(id, userId)
+//                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found or not owned by you"));
+//
+//        if (!claim.isRecallRequireAttachment()) {
+//            throw new ResponseStatusException(HttpStatus.CONFLICT, "This claim does not require an attachment");
+//        }
+//
+//        if (file == null || file.isEmpty()) {
+//            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
+//        }
+//
+//        // Store directly in claim (in your current design receipts are inline on Claim)
+//        claim.setReceiptFile(file.getBytes());
+//        claim.setReceiptFilename(file.getOriginalFilename());
+//        claim.setReceiptContentType(file.getContentType());
+//        claim.setReceiptSize(file.getSize());
+//
+//        // Clear recall requirement → back to pending
+//        claim.clearRecall("Attachment provided by user");
+//
+//        claimRepository.save(claim);
+//        return ResponseEntity.ok().build();
+//    }
 
     /**
      * Quick HEAD probe to check if a receipt/attachment exists for a claim.
