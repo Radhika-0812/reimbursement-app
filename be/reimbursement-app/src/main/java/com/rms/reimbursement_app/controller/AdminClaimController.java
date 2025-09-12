@@ -107,6 +107,15 @@ public class AdminClaimController {
         return new PageImpl<>(mapped, safe, page.getTotalElements());
     }
 
+    @GetMapping("/recalled")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Page<AdminClaimView> getAllRecalled(@PageableDefault(size = 20) Pageable pageable) {
+        Pageable safe = sanitize(pageable);
+        var page = service.getAllRecalled(safe);
+        var mapped = page.getContent().stream().map(AdminClaimView::from).toList();
+        return new PageImpl<>(mapped, safe, page.getTotalElements());
+    }
+    
     @GetMapping("/rejected")
     @PreAuthorize("hasRole('ADMIN')")
     public Page<AdminClaimView> getAllRejected(@PageableDefault(size = 20) Pageable pageable,

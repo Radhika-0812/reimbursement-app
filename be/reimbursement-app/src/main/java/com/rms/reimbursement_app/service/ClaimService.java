@@ -100,6 +100,11 @@ public class ClaimService {
     }
 
     @Transactional(readOnly = true)
+    public Page<Claim> getAllRecalled(Pageable pageable) {
+        return repo.findByStatus(ClaimStatus.RECALLED, pageable);
+    }
+
+    @Transactional(readOnly = true)
     public List<Claim> myApproved(Long userId) {
         return repo.findAllByUserIdAndStatusOrderByCreatedAtDesc(userId, ClaimStatus.APPROVED);
     }
