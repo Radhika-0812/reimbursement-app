@@ -10,9 +10,9 @@ import com.rms.reimbursement_app.service.ClaimService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -114,92 +114,6 @@ public class ClaimController {
         return ClaimResponse.from(updated);
     }
 
-    // ----------------------- Missing attachment upload (alias) -----------------------
-
-    @PostMapping(path = "/{id}/attachments/missing", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<UploadResponse> uploadMissingAttachment(@PathVariable Long id,
-                                                                  @AuthenticationPrincipal Jwt jwt,
-                                                                  Authentication authentication,
-                                                                  @RequestParam("file") MultipartFile file) throws Exception {
-        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-
-        var saved = service.uploadReceiptForUser(id, userId, isAdmin, file);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new UploadResponse(
-                        saved.getId(),
-                        saved.getReceiptFilename(),
-                        saved.getReceiptContentType(),
-                        saved.getReceiptSize()
-                ));
-    }
-
-    // ----------------------- Receipt upload/download (owner-only; admin bypass) -----------------------
-
-    /**
-     * Upload or replace a receipt file for a claim (owner-only unless ADMIN).
-     * Form field name must be "file".
-     */
-    @PostMapping(path = "/{id}/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<UploadResponse> uploadReceipt(@PathVariable Long id,
-                                                        @AuthenticationPrincipal Jwt jwt,
-                                                        Authentication authentication,
-                                                        @RequestParam("file") MultipartFile file) throws Exception {
-        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-
-        var saved = service.uploadReceiptForUser(id, userId, isAdmin, file);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new UploadResponse(
-                        saved.getId(),
-                        saved.getReceiptFilename(),
-                        saved.getReceiptContentType(),
-                        saved.getReceiptSize()
-                ));
-    }
-
-    /**
-     * HEAD probe for receipt existence (used by PendingClaims page).
-     * 200 if exists, 404 if not. Avoids loading the whole blob.
-     */
-    @RequestMapping(value = "/{id}/receipt", method = RequestMethod.HEAD)
-    @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<Void> headReceipt(@PathVariable Long id,
-                                            @AuthenticationPrincipal Jwt jwt,
-                                            Authentication authentication) {
-        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-        boolean exists = service.receiptExists(id);
-        return exists ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-    }
-
-    /**
-     * Download the stored receipt (owner-only unless ADMIN).
-     */
-    @GetMapping("/{id}/receipt")
-    @PreAuthorize("hasAnyRole('USER','ADMIN')")
-    public ResponseEntity<byte[]> downloadReceipt(@PathVariable Long id,
-                                                  @AuthenticationPrincipal Jwt jwt,
-                                                  Authentication authentication) {
-        Long userId = Long.valueOf(jwt.getClaim("uid").toString());
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-
-        var fileData = service.downloadReceiptForUser(id, userId, isAdmin);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType(fileData.contentType()));
-        headers.setContentDisposition(ContentDisposition.attachment().filename(fileData.filename()).build());
-        headers.setContentLength(fileData.bytes().length);
-
-        return new ResponseEntity<>(fileData.bytes(), headers, HttpStatus.OK);
-    }
-
     // ----------------------- Resubmit after recall -----------------------
 
     /**
@@ -259,9 +173,6 @@ public class ClaimController {
         List<ClaimResponse> content = (fromIdx >= total || fromIdx < 0) ? List.of() : all.subList(fromIdx, toIdx);
         return new PageDto<>(content, oneBasedPage, safeSize, total, totalPages);
     }
-
-    // Small response payload for upload endpoint
-    public record UploadResponse(Long claimId, String filename, String contentType, Long size) {}
 
     // JSON request for resubmit
     public record ResubmitRequest(@Size(max = 2000) String comment) {}
