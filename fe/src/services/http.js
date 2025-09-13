@@ -4,7 +4,7 @@
 const raw = (import.meta.env?.VITE_API_BASE ?? "").toString().trim();
 export const API_BASE = raw.replace(/\/$/, "");
 
-// 2) Helpful logs (dev only) + expose for console debug
+// 2) Helpful logs (dev only) + expose for console 
 if (import.meta.env.DEV) {
   console.info("[HTTP] API_BASE =", API_BASE || "(empty)");
   // Expose a read-only alias so you can check it from the console:
