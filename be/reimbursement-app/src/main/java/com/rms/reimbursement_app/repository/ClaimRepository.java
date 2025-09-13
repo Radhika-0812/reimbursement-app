@@ -26,6 +26,8 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
 
     List<Claim> findAllByCreatedAtBetweenAndStatusOrderByCreatedAtDesc(Instant from, Instant to, ClaimStatus status);
 
+    Page<Claim> findByRecallActiveTrue(Pageable pageable);
+
     // ------- Convenience/guard -------
     boolean existsByIdAndUserId(Long id, Long userId);
 
@@ -70,19 +72,21 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
-           update Claim c
-           set c.recallActive = true,
-               c.recallRequireAttachment = true,
-               c.recallReason = :reason,
-               c.adminComment = :note,
-               c.status = com.rms.reimbursement_app.domain.ClaimStatus.RECALLED,
-               c.recalledAt = :ts
-           where c.id = :claimId
-           """)
+       update Claim c
+       set c.recallActive = true,
+           c.recallRequireAttachment = true,
+           c.recallReason = :reason,
+           c.adminComment = :note,
+           /* keep status as PENDING */
+           c.status = com.rms.reimbursement_app.domain.ClaimStatus.PENDING,
+           c.recalledAt = :ts
+       where c.id = :claimId
+       """)
     int markNeedAttachment(@Param("claimId") Long claimId,
                            @Param("reason") String reason,
                            @Param("note") String note,
                            @Param("ts") Instant ts);
+
 
     /**
      * User uploads attachment → clear recall flags, back to PENDING.

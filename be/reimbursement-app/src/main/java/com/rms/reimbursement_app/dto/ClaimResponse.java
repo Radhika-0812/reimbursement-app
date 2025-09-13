@@ -13,7 +13,7 @@ public class ClaimResponse {
     private Long id;
     private Long userId;
     private String userName;
-    private String userEmail;
+    private String userEmail;   // ✅ snapshot or live
 
     private String title;
     private LocalDate claimDate;
@@ -43,7 +43,7 @@ public class ClaimResponse {
         r.id = c.getId();
         r.userId = c.getUserId();
         r.userName = c.getUserName();
-        r.userEmail = c.getUserEmail();
+        r.userEmail = c.getEffectiveUserEmail(); // ✅ use snapshot (or fallback to relation)
 
         r.title = c.getTitle();
         r.claimDate = c.getClaimDate();
@@ -69,7 +69,7 @@ public class ClaimResponse {
         return r;
     }
 
-    // getters (generate if you prefer Lombok)
+    // --- getters ---
     public Long getId() { return id; }
     public Long getUserId() { return userId; }
     public String getUserName() { return userName; }

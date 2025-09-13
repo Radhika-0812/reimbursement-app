@@ -123,8 +123,9 @@ public class ClaimService {
 
     @Transactional(readOnly = true)
     public Page<Claim> getAllRecalled(Pageable pageable) {
-        return repo.findByStatus(ClaimStatus.RECALLED, pageable);
+        return repo.findByRecallActiveTrue(pageable);
     }
+
 
     @Transactional(readOnly = true)
     public List<Claim> myApproved(Long userId) {
@@ -212,14 +213,17 @@ public class ClaimService {
         var c = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
 
+        // 🔄 Set recall flags but KEEP status as PENDING
         c.setRecallActive(true);
         c.setRecallReason(reason.trim());
         c.setRecallRequireAttachment(requireAttachment);
         c.setResubmitComment(null);
         c.setRecalledAt(Instant.now());
-        c.setStatus(ClaimStatus.RECALLED);
+        c.setStatus(ClaimStatus.PENDING);
+
         return repo.save(c);
     }
+
 
     @Transactional
     public Claim adminRequestAttachment(Long id, String note) {
@@ -241,33 +245,39 @@ public class ClaimService {
     }
 
     @Transactional
-    public Claim resubmit(Long claimId, Long currentUserId, String resubmitComment, MultipartFile optionalFile)
-            throws IOException {
-
-        final Claim c = repo.findByIdAndUserId(claimId, currentUserId).orElseThrow(() -> {
+    public Claim resubmit(Long claimId, Long userId, String resubmitComment, MultipartFile file) throws IOException {
+        var c = repo.findByIdAndUserId(claimId, userId).orElseThrow(() -> {
             boolean exists = repo.existsById(claimId);
-            return new ResponseStatusException(exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
-                    exists ? "Not your claim" : "Claim not found");
+            return new ResponseStatusException(
+                    exists ? HttpStatus.FORBIDDEN : HttpStatus.NOT_FOUND,
+                    exists ? "Not your claim" : "Claim not found"
+            );
         });
 
-        if (!c.isRecallActive()) return c;
-
-        if (optionalFile != null && !optionalFile.isEmpty()) {
-            assignAndValidateFile(c, optionalFile);
-        }
-        if (resubmitComment != null && !resubmitComment.isBlank()) {
-            c.setResubmitComment(resubmitComment.trim());
+        // ✅ Ensure this flow only applies when claim is in recall
+        if (!c.isRecallActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Claim is not in recall");
         }
 
-        clearRecallAndSetPending(c);
+        if (file != null && !file.isEmpty()) {
+            assignAndValidateFile(c, file);
+        }
+
+        // Moves it back to PENDING and clears recall flags
+        c.clearRecall(resubmitComment);
+
         return repo.save(c);
     }
 
+
     @Transactional
-    public Claim resubmitAfterRecall(Long claimId, Long currentUserId, MultipartFile optionalFile, String resubmitComment)
+    public Claim resubmitAfterRecall(Long claimId, Long userId, MultipartFile optionalFile, String resubmitComment)
             throws IOException {
-        return resubmit(claimId, currentUserId, resubmitComment, optionalFile);
+        return resubmit(claimId, userId, resubmitComment, optionalFile);
     }
+
+
+
 
     @Transactional
     public Claim updateClaimAsUser(Long claimId, Long currentUserId, UpdateClaimRequest req) {
@@ -278,16 +288,14 @@ public class ClaimService {
                     exists ? "Not your claim" : "Claim not found");
         });
 
-        boolean editable =
-                c.getStatus() == ClaimStatus.PENDING
-                        || c.getStatus() == ClaimStatus.SUBMITTED
-                        || (c.getStatus() == ClaimStatus.RECALLED && c.isRecallActive());
-
+        // ✅ New rule: editable when PENDING OR recallActive
+        boolean editable = (c.getStatus() == ClaimStatus.PENDING) || c.isRecallActive();
         if (!editable) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Claim not editable in current state");
         }
 
-        c.applyUserEditDuringRecall(
+        // Use a non-restrictive applier (see entity change below)
+        c.applyUserEdit(
                 req.getTitle(),
                 req.getAmountCents(),
                 req.getDescription(),
@@ -296,8 +304,9 @@ public class ClaimService {
                 req.getClaimType()
         );
 
-        if (c.getStatus() == ClaimStatus.RECALLED && c.isRecallActive() && !c.isRecallRequireAttachment()) {
-            clearRecallAndSetPending(c);
+        // If edit was a reaction to a recall, clear the flags when attachment is NOT strictly required
+        if (c.isRecallActive() && !c.isRecallRequireAttachment()) {
+            clearRecallAndSetPending(c); // leaves status as PENDING and stamps resubmittedAt
         }
 
         return repo.save(c);
@@ -361,9 +370,10 @@ public class ClaimService {
 
         assignAndValidateFile(claim, file);
 
-        if (claim.getStatus() == ClaimStatus.RECALLED && claim.isRecallActive()) {
+        if (claim.isRecallActive()) {
             clearRecallAndSetPending(claim);
         }
+
 
         return repo.save(claim);
     }

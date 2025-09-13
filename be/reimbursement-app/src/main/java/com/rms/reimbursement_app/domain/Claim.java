@@ -25,11 +25,11 @@ public class Claim {
     @Column(nullable = false, name = "user_id")
     private Long userId;
 
-    // ✅ Persist a copy of the user's email at the time of claim creation
+    // Persist a copy of the user's email at the time of claim creation
     @Column(name = "user_email", length = 320)
     private String userEmail;
 
-    // Proper link to the users table (read-only mapping via user_id)
+    // Read-only link to users table via user_id
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "user_id", referencedColumnName = "id", insertable = false, updatable = false)
     private User user;
@@ -37,7 +37,7 @@ public class Claim {
     @Column(nullable = false, length = 140)
     private String title;
 
-    // Date user is claiming for (not createdAt)
+    // Date the expense happened (not createdAt)
     @Column(name = "claim_date")
     private LocalDate claimDate;
 
@@ -83,7 +83,7 @@ public class Claim {
     @Column(columnDefinition = "text")
     private String adminComment;
 
-    /* ===== Recall / Attachment Request fields ===== */
+    /* ===== Recall / Attachment Request flags ===== */
 
     // Admin has marked this claim as recalled (requires user action)
     @Column(nullable = false)
@@ -93,7 +93,7 @@ public class Claim {
     @Column(length = 2000)
     private String recallReason;
 
-    // If admin requires an attachment before resubmitting
+    // If admin requires an attachment before clearing the recall
     @Column(name = "recall_require_attachment", nullable = false)
     private boolean recallRequireAttachment = false;
 
@@ -104,7 +104,7 @@ public class Claim {
     @Column(name = "resubmitted_at")
     private Instant resubmittedAt;
 
-    // Last comment from user when resubmitting or requesting change
+    // Last comment from user when reacting (edit/upload/resubmit)
     @Column(length = 2000)
     private String resubmitComment;
 
@@ -129,7 +129,7 @@ public class Claim {
     @Transient
     public String getUserName() { return user != null ? user.getName() : null; }
 
-    // Use the stored userEmail if present; otherwise fall back to linked user record
+    // Use stored email if present; otherwise fall back to linked user record
     @Transient
     public String getEffectiveUserEmail() {
         if (userEmail != null && !userEmail.isBlank()) return userEmail;
@@ -139,50 +139,46 @@ public class Claim {
     @Transient
     public String getDesignation() { return user != null ? user.getDesignation() : null; }
 
-    /* ===== Convenience helpers used by UI/services ===== */
+    /* ===== Helpers used by services/UI ===== */
 
-    /** Mark this claim as recalled (set by admin). */
+    /** Admin marks claim as recalled but status remains PENDING; flags drive UI. */
     public void markRecalled(String reason, boolean requireAttachment) {
-        this.setStatus(ClaimStatus.RECALLED);
         this.setRecallActive(true);
         this.setRecallReason(reason);
         this.setRecallRequireAttachment(requireAttachment);
         this.setRecalledAt(Instant.now());
+        this.setStatus(ClaimStatus.PENDING); // ← always PENDING now
     }
 
-    /** Clear recall flags (set by user when resubmitting). */
+    /** Clear recall flags after user reacts (edit/upload/comment). */
     public void clearRecall(String resubmitComment) {
         this.setRecallActive(false);
         this.setRecallReason(null);
         this.setRecallRequireAttachment(false);
         this.setResubmitComment(resubmitComment);
-        this.setStatus(ClaimStatus.PENDING);
         this.setResubmittedAt(Instant.now());
+        this.setStatus(ClaimStatus.PENDING); // remains PENDING
     }
 
-    /** Does this claim currently have a receipt stored in any form? */
+    /** Is there any receipt stored? */
     @Transient
     public boolean getHasReceipt() {
-        if (this.getReceiptFile() != null && this.getReceiptFile().length > 0) return true;
-        if (this.getReceiptSize() != null && this.getReceiptSize() > 0) return true;
-        if (this.getReceiptFilename() != null && !this.getReceiptFilename().isBlank()) return true;
-        return this.getReceiptUrl() != null && !this.getReceiptUrl().isBlank();
+        if (this.receiptFile != null && this.receiptFile.length > 0) return true;
+        if (this.receiptSize != null && this.receiptSize > 0) return true;
+        if (this.receiptFilename != null && !this.receiptFilename.isBlank()) return true;
+        return this.receiptUrl != null && !this.receiptUrl.isBlank();
     }
 
-    /** True when the owner is allowed to edit details during recall flow. */
+
+
+    /** Apply user-editable fields (service should check isEditableByOwner()). */
     @Transient
-    public boolean isEditableByOwnerDuringRecall() {
-        // Allowed only when admin has recalled AND specifically requested an attachment.
-        // We also require the claim to be in RECALLED status (as set in markRecalled).
-        return this.recallActive && this.recallRequireAttachment && this.status == ClaimStatus.RECALLED;
+    public boolean isEditableByOwner() {
+        return this.status == ClaimStatus.PENDING || this.recallActive;
     }
 
-    /** Apply safe user-editable fields during recall. */
-    public void applyUserEditDuringRecall(String title, Long amountCents, String description, LocalDate claimDate,
-                                          CurrencyCode currencyCode, ClaimType claimType) {
-        if (!isEditableByOwnerDuringRecall()) {
-            throw new IllegalStateException("Claim not editable in current state");
-        }
+    public void applyUserEdit(String title, Long amountCents, String description, LocalDate claimDate,
+                              CurrencyCode currencyCode, ClaimType claimType) {
         if (title != null && !title.isBlank()) this.title = title;
         if (amountCents != null && amountCents >= 0) this.amountCents = amountCents;
         if (description != null) this.description = description;
@@ -190,4 +186,5 @@ public class Claim {
         if (currencyCode != null) this.currencyCode = currencyCode;
         if (claimType != null) this.claimType = claimType;
     }
+
 }
