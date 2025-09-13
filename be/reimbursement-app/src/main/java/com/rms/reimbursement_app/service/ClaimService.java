@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 public class ClaimService {
 
     private final ClaimRepository repo;
-    private final EmailService emailService; // ✅ mailer
+    private final EmailService emailService;
 
     @PersistenceContext
     private EntityManager em;

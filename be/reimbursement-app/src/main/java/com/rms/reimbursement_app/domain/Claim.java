@@ -1,4 +1,4 @@
-// com/rms/reimbursement_app/domain/Claim.java
+// src/main/java/com/rms/reimbursement_app/domain/Claim.java
 package com.rms.reimbursement_app.domain;
 
 import jakarta.persistence.*;
@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "claims")
 @Getter @Setter
-@DynamicUpdate // only updates changed columns (helps avoid unnecessary DB updates)
+@DynamicUpdate // only updates changed columns
 public class Claim {
 
     @Id
@@ -25,7 +25,11 @@ public class Claim {
     @Column(nullable = false, name = "user_id")
     private Long userId;
 
-    // ✅ Proper link to the users table (read-only mapping via user_id)
+    // ✅ Persist a copy of the user's email at the time of claim creation
+    @Column(name = "user_email", length = 320)
+    private String userEmail;
+
+    // Proper link to the users table (read-only mapping via user_id)
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "user_id", referencedColumnName = "id", insertable = false, updatable = false)
     private User user;
@@ -33,7 +37,7 @@ public class Claim {
     @Column(nullable = false, length = 140)
     private String title;
 
-    // 👇 Date user is claiming for (not createdAt)
+    // Date user is claiming for (not createdAt)
     @Column(name = "claim_date")
     private LocalDate claimDate;
 
@@ -120,12 +124,17 @@ public class Claim {
     @PreUpdate
     void touch() { this.updatedAt = Instant.now(); }
 
-    /* ===== Convenience (read-only) accessors sourced from User ===== */
+    /* ===== Convenience (read-only) accessors ===== */
+
     @Transient
     public String getUserName() { return user != null ? user.getName() : null; }
 
+    // Use the stored userEmail if present; otherwise fall back to linked user record
     @Transient
-    public String getUserEmail() { return user != null ? user.getEmail() : null; }
+    public String getEffectiveUserEmail() {
+        if (userEmail != null && !userEmail.isBlank()) return userEmail;
+        return user != null ? user.getEmail() : null;
+    }
 
     @Transient
     public String getDesignation() { return user != null ? user.getDesignation() : null; }
