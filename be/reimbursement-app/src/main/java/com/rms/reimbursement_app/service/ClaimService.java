@@ -230,12 +230,23 @@ public class ClaimService {
         if (note == null || note.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Attachment request note required");
         }
-        int updated = repo.markNeedAttachment(id, note.trim(), note.trim(), Instant.now());
+
+        int updated = repo.markNeedAttachment(
+                id,
+                "Attachment required",  // maps to :reason
+                note.trim(),            // maps to :comment
+                Instant.now(),
+                ClaimStatus.RECALLED    // maps to :status
+        );
+
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found or not updatable");
         }
-        return repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found after update"));
+
+        return repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found after update"));
     }
+
 
     @Transactional
     public Claim adminCancelRecall(Long id) {

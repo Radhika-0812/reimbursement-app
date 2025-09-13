@@ -72,20 +72,20 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
-       update Claim c
-       set c.recallActive = true,
-           c.recallRequireAttachment = true,
-           c.recallReason = :reason,
-           c.adminComment = :note,
-           /* keep status as PENDING */
-           c.status = com.rms.reimbursement_app.domain.ClaimStatus.PENDING,
-           c.recalledAt = :ts
-       where c.id = :claimId
-       """)
+   update Claim c
+   set c.recallActive = true,
+       c.recallRequireAttachment = true,
+       c.recallReason = :reason,
+       c.adminComment = :comment,
+       c.status = :status,
+       c.recalledAt = :ts
+   where c.id = :claimId
+   """)
     int markNeedAttachment(@Param("claimId") Long claimId,
                            @Param("reason") String reason,
-                           @Param("note") String note,
-                           @Param("ts") Instant ts);
+                           @Param("comment") String comment,
+                           @Param("ts") Instant ts,
+                           @Param("status") ClaimStatus status);
 
 
     /**

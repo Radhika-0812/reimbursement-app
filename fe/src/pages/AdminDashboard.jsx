@@ -921,6 +921,7 @@ export default function AdminDashboard() {
             <option value="PENDING">Pending</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
+            <option value="RECALLED">Recalled</option>
           </select>
         </div>
 
@@ -990,7 +991,18 @@ export default function AdminDashboard() {
                   <td className="px-4 py-2">{displayDesignation(c)}</td>
                   <td className="px-4 py-2">{c.title}</td>
                   <td className="px-4 py-2">{formatCentsForClaim(c)}</td>
-                  <td className="px-4 py-2">{c.status}</td>
+                  <td className="px-4 py-2">
+                    {c.status}
+                    {c.recallActive && (
+                      <span
+                        className="ml-2 px-2 py-0.5 rounded text-[11px]"
+                        style={{ background: "var(--warning)", color: "black" }}
+                      >
+                        needs info
+                      </span>
+                    )}
+                  </td>
+
                   {statusTab === "REJECTED" && (
                     <td className="px-4 py-2 max-w-[360px] truncate" style={{ color: "#b91c1c" }}
                         title={firstNonEmpty(c.adminComment, c.admin_comment) || ""}>
