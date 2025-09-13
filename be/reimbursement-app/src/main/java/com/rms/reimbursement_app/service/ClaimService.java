@@ -1,15 +1,18 @@
+// src/main/java/com/rms/reimbursement_app/service/ClaimService.java
 package com.rms.reimbursement_app.service;
 
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.dto.UpdateClaimRequest;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
-import com.rms.reimbursement_app.service.EmailService;
+import com.rms.reimbursement_app.domain.User;
 import com.rms.reimbursement_app.repository.ClaimRepository;
+import com.rms.reimbursement_app.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -28,9 +31,11 @@ import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ClaimService {
 
     private final ClaimRepository repo;
+    private final UserRepository userRepo;          // ✅ added
     private final EmailService emailService;
 
     @PersistenceContext
@@ -56,6 +61,9 @@ public class ClaimService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No claims provided");
         }
 
+        // ✅ resolve and cache user's email once
+        final String userEmail = resolveUserEmail(userId);
+
         var entities = items.stream().map(in -> {
             if (in.getTitle() == null || in.getTitle().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required");
@@ -73,6 +81,7 @@ public class ClaimService {
 
             var c = new Claim();
             c.setUserId(userId);
+            c.setUserEmail(userEmail);                // ✅ persist snapshot of email
             c.setTitle(in.getTitle());
             c.setAmountCents(amountCents);
             c.setCurrencyCode(in.getCurrencyCode());
@@ -88,16 +97,16 @@ public class ClaimService {
         em.flush();
         saved.forEach(em::refresh);
 
-        // ✅ Email notifications on create
+        // ✅ Email notifications on create (user + admins)
         for (Claim c : saved) {
-            String userEmail = resolveUserEmail(c.getUserId());
             emailService.notifyClaimCreated(
-                    userEmail,
+                    safeEmail(c),               // may be null → EmailService should guard
                     c.getId(),
                     c.getTitle(),
                     c.getAmountCents(),
-                    c.getCurrencyCode().name()  // or .toString()
-            );        }
+                    c.getCurrencyCode().name()
+            );
+        }
 
         return saved;
     }
@@ -157,14 +166,13 @@ public class ClaimService {
         c.setStatus(ClaimStatus.APPROVED);
         var saved = repo.save(c);
 
-        // ✅ email user
-        String userEmail = resolveUserEmail(c.getUserId());
-        emailService.notifyClaimCreated(
-                userEmail,
-                c.getId(),
-                c.getTitle(),
-                c.getAmountCents(),
-                c.getCurrencyCode().name()  // or .toString()
+        // ✅ email user — approved
+        emailService.notifyApproved(
+                safeEmail(saved),
+                saved.getId(),
+                saved.getTitle(),
+                saved.getAmountCents(),
+                saved.getCurrencyCode().name()
         );
 
         return saved;
@@ -183,9 +191,13 @@ public class ClaimService {
         c.setAdminComment(comment);
         var saved = repo.save(c);
 
-        // ✅ email user
-        String userEmail = resolveUserEmail(c.getUserId());
-        emailService.notifyRejected(userEmail, c.getId(), c.getTitle(), comment);
+        // ✅ email user — rejected
+        emailService.notifyRejected(
+                safeEmail(saved),
+                saved.getId(),
+                saved.getTitle(),
+                comment
+        );
 
         return saved;
     }
@@ -418,10 +430,24 @@ public class ClaimService {
         c.setStatus(ClaimStatus.PENDING);
     }
 
+    /** Resolve the user's current email from DB. */
     private String resolveUserEmail(Long userId) {
-        // ✅ Replace this with your real user lookup.
-        // For now produce a deterministic placeholder so the code compiles/works.
-        return "user+" + userId + "@example.com";
+        return userRepo.findById(userId)
+                .map(User::getEmail)
+                .orElseGet(() -> {
+                    log.warn("No email found for userId={}", userId);
+                    return null;
+                });
+    }
+
+    /** Prefer stored snapshot; fall back to live user relation if needed. */
+    private String safeEmail(Claim c) {
+        if (c.getUserEmail() != null && !c.getUserEmail().isBlank()) return c.getUserEmail();
+        if (c.getUser() != null && c.getUser().getEmail() != null && !c.getUser().getEmail().isBlank()) {
+            return c.getUser().getEmail();
+        }
+        // last resort: resolve via repository
+        return resolveUserEmail(c.getUserId());
     }
 
     // Lightweight DTO for downloads
