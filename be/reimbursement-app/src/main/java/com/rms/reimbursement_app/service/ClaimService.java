@@ -1,10 +1,10 @@
-// src/main/java/com/rms/reimbursement_app/service/ClaimService.java
 package com.rms.reimbursement_app.service;
 
 import com.rms.reimbursement_app.dto.CreateClaimRequest;
 import com.rms.reimbursement_app.dto.UpdateClaimRequest;
 import com.rms.reimbursement_app.domain.Claim;
 import com.rms.reimbursement_app.domain.ClaimStatus;
+import com.rms.reimbursement_app.service.EmailService;
 import com.rms.reimbursement_app.repository.ClaimRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -31,6 +31,7 @@ import java.util.stream.Stream;
 public class ClaimService {
 
     private final ClaimRepository repo;
+    private final EmailService emailService; // ✅ mailer
 
     @PersistenceContext
     private EntityManager em;
@@ -86,6 +87,18 @@ public class ClaimService {
         var saved = repo.saveAll(entities);
         em.flush();
         saved.forEach(em::refresh);
+
+        // ✅ Email notifications on create
+        for (Claim c : saved) {
+            String userEmail = resolveUserEmail(c.getUserId());
+            emailService.notifyClaimCreated(
+                    userEmail,
+                    c.getId(),
+                    c.getTitle(),
+                    c.getAmountCents(),
+                    c.getCurrencyCode().name()  // or .toString()
+            );        }
+
         return saved;
     }
 
@@ -142,7 +155,19 @@ public class ClaimService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending can be approved");
         }
         c.setStatus(ClaimStatus.APPROVED);
-        return repo.save(c);
+        var saved = repo.save(c);
+
+        // ✅ email user
+        String userEmail = resolveUserEmail(c.getUserId());
+        emailService.notifyClaimCreated(
+                userEmail,
+                c.getId(),
+                c.getTitle(),
+                c.getAmountCents(),
+                c.getCurrencyCode().name()  // or .toString()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -156,12 +181,17 @@ public class ClaimService {
         }
         c.setStatus(ClaimStatus.REJECTED);
         c.setAdminComment(comment);
-        return repo.save(c);
+        var saved = repo.save(c);
+
+        // ✅ email user
+        String userEmail = resolveUserEmail(c.getUserId());
+        emailService.notifyRejected(userEmail, c.getId(), c.getTitle(), comment);
+
+        return saved;
     }
 
-    // ===================== Recall Flow =====================
+    // ===================== Recall Flow (unchanged) =====================
 
-    /** Admin starts recall with a reason (status → RECALLED). */
     @Transactional
     public Claim adminStartRecall(Long id, String reason, boolean requireAttachment) {
         if (reason == null || reason.isBlank()) {
@@ -179,7 +209,6 @@ public class ClaimService {
         return repo.save(c);
     }
 
-    /** Admin shorthand to mark “need attachment” with note. */
     @Transactional
     public Claim adminRequestAttachment(Long id, String note) {
         if (note == null || note.isBlank()) {
@@ -192,7 +221,6 @@ public class ClaimService {
         return repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found after update"));
     }
 
-    /** Admin cancels recall: clear flags; status → PENDING. */
     @Transactional
     public Claim adminCancelRecall(Long id) {
         var c = repo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Claim not found"));
@@ -200,10 +228,6 @@ public class ClaimService {
         return repo.save(c);
     }
 
-    /**
-     * User resubmits after recall. Optional file + comment.
-     * Always returns to PENDING (regardless of “need attachment” selection).
-     */
     @Transactional
     public Claim resubmit(Long claimId, Long currentUserId, String resubmitComment, MultipartFile optionalFile)
             throws IOException {
@@ -214,7 +238,6 @@ public class ClaimService {
                     exists ? "Not your claim" : "Claim not found");
         });
 
-        // Not in recall → no-op
         if (!c.isRecallActive()) return c;
 
         if (optionalFile != null && !optionalFile.isEmpty()) {
@@ -228,20 +251,12 @@ public class ClaimService {
         return repo.save(c);
     }
 
-    /** Alias for controllers. */
     @Transactional
     public Claim resubmitAfterRecall(Long claimId, Long currentUserId, MultipartFile optionalFile, String resubmitComment)
             throws IOException {
         return resubmit(claimId, currentUserId, resubmitComment, optionalFile);
     }
 
-    /**
-     * User can edit details while:
-     *  - PENDING or SUBMITTED, or
-     *  - RECALLED (recallActive = true).
-     * If the claim is in recall **and** “need attachment” is NOT required,
-     * saving edits counts as a reaction → status goes back to PENDING.
-     */
     @Transactional
     public Claim updateClaimAsUser(Long claimId, Long currentUserId, UpdateClaimRequest req) {
         final Claim c = repo.findByIdAndUserId(claimId, currentUserId).orElseThrow(() -> {
@@ -269,7 +284,6 @@ public class ClaimService {
                 req.getClaimType()
         );
 
-        // If recall is active but attachment is NOT required, the user’s edit is a valid reaction → back to PENDING.
         if (c.getStatus() == ClaimStatus.RECALLED && c.isRecallActive() && !c.isRecallRequireAttachment()) {
             clearRecallAndSetPending(c);
         }
@@ -277,9 +291,6 @@ public class ClaimService {
         return repo.save(c);
     }
 
-    /**
-     * User leaves a change-request message for admin (no status change).
-     */
     @Transactional
     public void createUserChangeRequest(Long claimId, Long userId, String message) {
         if (message == null || message.isBlank()) {
@@ -323,10 +334,6 @@ public class ClaimService {
         );
     }
 
-    /**
-     * Owner/admin upload. If the claim is in recall (active), this counts as a reaction:
-     * recall flags are cleared and status becomes PENDING.
-     */
     @Transactional
     public Claim uploadReceiptForUser(Long claimId, Long currentUserId, boolean isAdmin, MultipartFile file)
             throws IOException {
@@ -342,7 +349,6 @@ public class ClaimService {
 
         assignAndValidateFile(claim, file);
 
-        // If recall is active, uploading the file satisfies the requirement → back to PENDING.
         if (claim.getStatus() == ClaimStatus.RECALLED && claim.isRecallActive()) {
             clearRecallAndSetPending(claim);
         }
@@ -410,6 +416,12 @@ public class ClaimService {
         c.setRecallReason(null);
         c.setResubmittedAt(Instant.now());
         c.setStatus(ClaimStatus.PENDING);
+    }
+
+    private String resolveUserEmail(Long userId) {
+        // ✅ Replace this with your real user lookup.
+        // For now produce a deterministic placeholder so the code compiles/works.
+        return "user+" + userId + "@example.com";
     }
 
     // Lightweight DTO for downloads
