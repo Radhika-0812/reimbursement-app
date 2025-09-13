@@ -59,7 +59,7 @@ async function request(method, path, { json, formData, headers: extra } = {}) {
   return ct.includes("application/json") ? res.json() : res.text();
 }
 
-/* ---------------- Admin: recall / need attachment --------- */
+/* ---------------- Admin: recall / need attachment ----- */
 
 
 export async function adminRecallClaim(claimId, { reason, requireAttachment } = {}) {
