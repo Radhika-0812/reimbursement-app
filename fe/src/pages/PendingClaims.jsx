@@ -1113,7 +1113,7 @@ export default function PendingClaims() {
         }}
       />
 
-      {/* Resubmit modal */}
+      
       <ResubmitModal
         open={resubmitOpen}
         onClose={() => {
