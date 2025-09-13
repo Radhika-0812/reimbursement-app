@@ -1003,6 +1003,8 @@ export default function AdminDashboard() {
                     )}
                   </td>
 
+                  
+
                   {statusTab === "REJECTED" && (
                     <td className="px-4 py-2 max-w-[360px] truncate" style={{ color: "#b91c1c" }}
                         title={firstNonEmpty(c.adminComment, c.admin_comment) || ""}>
