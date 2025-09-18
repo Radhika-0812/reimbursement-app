@@ -149,7 +149,7 @@ public class EmailService {
     }
 
     private static String formatAmount(long amountCents, String currency) {
-        double amount = amountCents / 100.0d;
+        double amount = amountCents;
         return String.format("%s %.2f", currency == null ? "" : currency, amount);
     }
 }
